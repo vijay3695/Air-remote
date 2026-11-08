@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Magic Remote</string>
+    <string name="title_activity_main">Magic Remote</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="air_mouse">Air Mouse</string>
+    <string name="trackpad">Trackpad</string>
+    <string name="ready">Ready</string>
+    <string name="connected">Connected to {0}</string>
+    <string name="failed">Failed to connect</string>
+    <string name="auto_discovery">Auto-discovery</string>
+    <string name="discovery_started">Auto-discovery started...</string>
+
+    <!-- Remote control button labels -->
+    <string name="btn_back">BACK</string>
+    <string name="btn_up">UP</string>
+    <string name="btn_ok">OK</string>
+    <string name="btn_left">LEFT</string>
+    <string name="btn_right">RIGHT</string>
+    <string name="btn_home">HOME</string>
+    <string name="btn_down">DOWN</string>
+    <string name="btn_power">POWER</string>
+    <string name="btn_mute">MUTE</string>
+    <string name="btn_volup">VOL+</string>
+    <string name="btn_voldown">VOL-</string>

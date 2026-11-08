@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#1a1a2e">
+
+    <!-- Top bar -->
+    <TextView
+        android:id="@+id/tv_app_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Magic Remote"
+        android:textColor="#ffffff"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center"/>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1"
+        android:layout_margin="8dp"
+        android:background="#333333"/>
+
+    <!-- Connection section -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginVertical="8dp">
+
+        <EditText
+            android:id="@+id/tv_ip_address"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Enter TV IP address"
+            android:textColor="#ffffff"
+            android:textColorHint="#666666"
+            android:background="#333344"
+            android:textColorLink="#009688"
+            android:padding="8dp"/>
+
+        <Button
+            android:id="@+id/btn_connect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect"
+            android:background="#009688"
+            android:textColor="#ffffff"
+            android:padding="8dp"/>
+    </LinearLayout>
+
+    <!-- Status -->
+    <TextView
+        android:id="@+id/txt_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ready - configure TV IP or start discovery"
+        android:textColor="#888888"
+        android:textSize="14sp"
+        android:padding="4dp"/>
+
+    <!-- Remote control section -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Remote Control"
+        android:textColor="#ffffff"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginTop="12dp"/>
+
+    <!-- D-pad section - grid of buttons -->
+    <GridLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:columnCount="3"
+        android:rowCount="4"
+        android:layout_marginTop="8dp">
+
+        <!-- Row 1: Back, Up, OK -->
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="BACK"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_back"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="UP"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_up"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="OK"
+            android:background="#009688"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_ok"/>
+
+        <!-- Row 2: Left, Select, Right -->
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="LEFT"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_left"/>
+
+        <!-- Empty cell for center/OK already above -->
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="RIGHT"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_right"/>
+
+        <!-- Row 3: Home, Down -->
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="HOME"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_home"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="DOWN"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_down"/>
+
+        <!-- Row 4: Additional buttons -->
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="POWER"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_power"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="MUTE"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_mute"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="VOL+"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_volup"/>
+
+        <Button
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_columnWeight="1"
+            android:layout_rowWeight="1"
+            android:text="VOL-"
+            android:background="#444444"
+            android:textColor="#ffffff"
+            android:id="@+id/btn_voldown"/>
+    </GridLayout>
+
+    <!-- Bluetooth / Air-mouse toggle -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btn_air_mouse"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Air Mouse"
+            android:background="#607D8B"
+            android:textColor="#ffffff"
+            android:padding="8dp"/>
+
+        <Button
+            android:id="@+id/btn_trackpad"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Trackpad"
+            android:background="#607D8B"
+            android:textColor="#ffffff"
+            android:padding="8dp"/>
+    </LinearLayout>
+
+</LinearLayout>
