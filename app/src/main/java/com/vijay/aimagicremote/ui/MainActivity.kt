@@ -310,6 +310,10 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
     private fun setTargetDevice(type: RemoteManager.TargetDeviceType) {
+        if (type != activeTarget && isConnected) {
+            // Do not leave the UI showing a connected session after switching protocols.
+            disconnectDevice()
+        }
         activeTarget = type
         RemoteManager.setTargetType(type)
 
