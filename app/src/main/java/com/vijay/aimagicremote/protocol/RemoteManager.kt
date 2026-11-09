@@ -224,7 +224,7 @@ object RemoteManager {
     /**
      * Send key command to active target device only
      */
-    fun sendKey(androidKeyCode: Int, pcKeyName: String) {
+    fun sendKey(androidKeyCode: Int, keyName: String) {
         scope.launch {
             if (!isConnected) {
                 Log.w(TAG, "Cannot send key: Target device is not connected.")
@@ -236,16 +236,16 @@ object RemoteManager {
                     Atrpv2Protocol.sendKey(androidKeyCode)
                 }
                 TargetDeviceType.SAMSUNG_TIZEN -> {
-                    SamsungTizenProtocol.sendKey(pcKeyName)
+                    SamsungTizenProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.LG_WEBOS -> {
-                    LgWebOsProtocol.sendKey(pcKeyName)
+                    LgWebOsProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.ROKU_TCL -> {
-                    RokuTclProtocol.sendKey(pcKeyName)
+                    RokuTclProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.WINDOWS_PC -> {
-                    PcRemoteProtocol.sendKey(pcKeyName)
+                    PcRemoteProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.BLUETOOTH_HID -> {
                     Log.w(TAG, "Bluetooth HID command rejected: no HID session is connected.")

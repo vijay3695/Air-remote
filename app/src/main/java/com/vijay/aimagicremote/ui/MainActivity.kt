@@ -770,11 +770,9 @@ class MainActivity : AppCompatActivity() {
                         }
                         txtStatus?.text = "Connected to $deviceTypeStr ($cleanIp)"
                         prefs.edit().putString("last_device_ip", cleanIp).apply()
-                        if (activeTarget == RemoteManager.TargetDeviceType.ANDROID_TV) {
-                            startTvConnectionKeepAlive(cleanIp)
-                        } else {
-                            stopTvConnectionKeepAlive()
-                        }
+                        // Keep-alive foreground service for all connected targets
+                        // (not just Android TV) so connections survive in background.
+                        startTvConnectionKeepAlive(cleanIp, activeTarget)
                         enableRemoteControls(true)
                     }
                 }
@@ -807,10 +805,11 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun startTvConnectionKeepAlive(ip: String) {
+    private fun startTvConnectionKeepAlive(ip: String, targetType: RemoteManager.TargetDeviceType) {
         val intent = Intent(this, TvConnectionService::class.java).apply {
             action = TvConnectionService.ACTION_KEEP_ALIVE
             putExtra(TvConnectionService.EXTRA_TV_IP, ip)
+            putExtra(TvConnectionService.EXTRA_TARGET_TYPE, targetType.name)
         }
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

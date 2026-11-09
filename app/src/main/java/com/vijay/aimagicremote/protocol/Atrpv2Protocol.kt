@@ -547,15 +547,6 @@ object Atrpv2Protocol {
         }
     }
 
-    /** Stock Android TV Remote v2 does not provide a generally supported gyro pointer injection command. */
-    suspend fun injectPointer(x: Float, y: Float, isAbsolute: Boolean = false) {
-        Log.w(TAG, "Pointer injection is not part of the supported stock Android TV Remote v2 key protocol.")
-    }
-
-    suspend fun injectScroll(dx: Float, dy: Float) {
-        Log.w(TAG, "Scroll injection is not supported by the stock Android TV Remote v2 protocol.")
-    }
-
     fun sendText(text: String) {
         if (text.isEmpty() || !isConnected) return
         if (remoteFeatures and 4 == 0) {
