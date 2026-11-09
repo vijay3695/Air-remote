@@ -227,6 +227,19 @@ object SamsungTizenProtocol {
         return this == null || this.isEmpty() || this == "null"
     }
 
+    fun sendText(text: String) {
+        if (!isConnected || text.isEmpty()) return
+        val payload = JSONObject().apply {
+            put("method", "ms.remote.control")
+            put("params", JSONObject().apply {
+                put("Cmd", "InputString")
+                put("DataOfCmd", text)
+                put("TypeOfRemote", "SendInputString")
+            })
+        }
+        activeWebSocket?.send(payload.toString())
+    }
+
     fun disconnect() {
         scope.launch {
             disconnectInternal()
