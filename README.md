@@ -12,7 +12,7 @@ Project plans, design notes, protocol references, and the current issue/repair r
 
 ## 🚀 Key Features & Architecture
 
-- **Android dark UI**: Header status pill badge (`● Connected`), 3 target device modes, 3 mode tabs, and a 3x4 D-pad remote button grid.
+- **Android UI**: Connection status, a TV-platform chooser (Android TV / Google TV, Samsung Tizen, LG webOS, or Roku), Windows PC and an explicitly unavailable Bluetooth HID target; 3 remote-mode tabs and a D-pad grid.
 - **Multi-Brand TV Protocol Engine (`RemoteManager.kt`)**:
   - **Android TV / Google TV (ATRPv2)**: Persistent TLS 1.2 control socket on port `6466` & Protobuf 6-digit PIN pairing server on port `6467`.
   - **Samsung Tizen Smart TV**: WebSocket JSON control channel on ports `8001` (`ws://`) and `8002` (`wss://`).
@@ -24,7 +24,7 @@ Project plans, design notes, protocol references, and the current issue/repair r
   - `Sensor.TYPE_GAME_ROTATION_VECTOR` + `Sensor.TYPE_GYROSCOPE` 3D sensor fusion.
   - **1€ Filter** smoothing algorithm (`minCutoff = 1.2f`, `beta = 0.08f`) to reduce jitter.
   - **Calibration**: guided gyro-bias sampling plus continuous stillness-based drift correction; results depend on phone sensors and grip.
-- **Auto-Discovery Engine (`TvDiscoveryManager.kt`)**: mDNS (`_androidtvremote._tcp`, `_workstation._tcp`) and LAN UDP Broadcast Ping on port `9090`.
+- **Auto-Discovery Engine (`TvDiscoveryManager.kt`)**: Android TV mDNS and Windows receiver UDP discovery on port `9090`. Rescan restarts discovery and uses the current Wi-Fi subnet broadcast where available; unrelated generic workstation services are not treated as Air Remote receivers.
 
 ---
 
@@ -75,7 +75,7 @@ For third-party Wi-Fi remote apps to control your TV, specific TV menu settings 
 
 ## Download APK from GitHub
 
-The version-tag workflow `.github/workflows/release-apk.yml` builds/tests the app and attaches the APK to a GitHub Release when a `v*` tag is pushed. Releases are published at:
+The version-tag workflow `.github/workflows/release-apk.yml` builds/tests the app and attaches the APK to a GitHub Release when a `v*` tag is pushed. The main CI workflow also checks Android unit tests/builds and parses the Windows PowerShell receiver script. Releases are published at:
 
 [Air Remote GitHub Releases](https://github.com/vijay3695/Air-remote/releases)
 
