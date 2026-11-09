@@ -33,7 +33,7 @@ class ProtocolAndSensorUnitTest {
             AtvWire.string(2, "Air Remote")
         )
         val fields = AtvWire.parse(encoded)
-        assertEquals(300, fields.number(1))
+        assertEquals(300, fields.first { it.number == 1 }.numberValue.toInt())
         assertEquals("Air Remote", String(fields.first { it.number == 2 }.bytes!!, Charsets.UTF_8))
     }
 
