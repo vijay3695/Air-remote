@@ -39,14 +39,18 @@ jobs:
         run: |
           set -o pipefail
           for attempt in 1 2 3; do
-            if ./gradlew --no-daemon testDebugUnitTest assembleDebug; then
+            if ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee gradle-build.log; then
               exit 0
             fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Gradle build failed after 3 attempts."
+            if ! grep -Eiq 'Plugin .* was not found|Could not resolve|Could not (GET|HEAD)|Could not download|Temporary failure in name resolution|UnknownHostException|Connection timed out' gradle-build.log; then
+              echo "Build failure is not a recognized transient dependency-resolution error; stopping without retry."
               exit 1
             fi
-            echo "Gradle build attempt $attempt failed; retrying after a short delay..."
+            if [ "$attempt" -eq 3 ]; then
+              echo "Gradle dependency resolution failed after 3 attempts."
+              exit 1
+            fi
+            echo "Transient Gradle dependency failure on attempt $attempt; retrying after a short delay..."
             sleep $((attempt * 20))
           done
 
