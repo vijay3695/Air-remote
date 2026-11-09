@@ -50,6 +50,7 @@ object LgWebOsProtocol {
 
     private var activeWebSocket: WebSocket? = null
     private var pointerWebSocket: WebSocket? = null
+    @Volatile private var pointerSocketReady = false
     private val tvTrustManager = object : X509TrustManager {
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
         override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
@@ -273,13 +274,26 @@ object LgWebOsProtocol {
 
     private fun openPointerSocket(socketPath: String) {
         try {
+            pointerSocketReady = false
             pointerWebSocket?.close(1000, "Replacing pointer channel")
             pointerWebSocket = client.newWebSocket(Request.Builder().url(socketPath).build(), object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    pointerSocketReady = true
+                    Log.i(TAG, "LG pointer socket is ready.")
+                }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    pointerSocketReady = false
                     Log.w(TAG, "LG pointer socket unavailable: ${t.message}")
+                }
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    pointerSocketReady = false
+                }
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    pointerSocketReady = false
                 }
             })
         } catch (e: Exception) {
+            pointerSocketReady = false
             Log.w(TAG, "LG pointer socket could not be opened: ${e.message}")
         }
     }
@@ -294,6 +308,7 @@ object LgWebOsProtocol {
         try { pointerWebSocket?.close(1000, "User disconnected") } catch (_: Exception) {}
         try { activeWebSocket?.close(1000, "User disconnected") } catch (_: Exception) {}
         pointerWebSocket = null
+        pointerSocketReady = false
         activeWebSocket = null
         isConnected = false
     }
@@ -313,17 +328,17 @@ object LgWebOsProtocol {
     }
 
     fun sendPointerMove(dx: Float, dy: Float, down: Int = 0) {
-        if (!isConnected) return
+        if (!isConnected || !pointerSocketReady) return
         pointerWebSocket?.send("type:move\ndx:$dx\ndy:$dy\ndown:$down\n\n")
     }
 
     fun sendPointerClick() {
-        if (!isConnected) return
+        if (!isConnected || !pointerSocketReady) return
         pointerWebSocket?.send("type:click\n\n")
     }
 
     fun sendPointerScroll(dx: Float, dy: Float) {
-        if (!isConnected) return
+        if (!isConnected || !pointerSocketReady) return
         pointerWebSocket?.send("type:scroll\ndx:$dx\ndy:$dy\n\n")
     }
 
@@ -346,7 +361,7 @@ object LgWebOsProtocol {
         }
 
         val pointer = pointerWebSocket
-        if (pointerName != null && pointer != null && isConnected) {
+        if (pointerName != null && pointer != null && pointerSocketReady && isConnected) {
             pointer.send("type:button\nname:$pointerName\n\n")
             return
         }
