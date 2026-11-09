@@ -8,6 +8,26 @@
 >
 > This document is a diagnosis and plan, not a claim that fixes have been implemented or tested.
 
+> **Baseline note:** The table and source findings below describe the pre-repair snapshot. Source repairs have since been committed to `main`; do not read the old findings as a statement that those exact lines are still present.
+
+## Repair update — 2026-11-09
+
+The repair work has started directly on `main`. These changes are committed, but **real TV and Windows hardware acceptance tests have not yet been completed**.
+
+- **Windows PC Air Mouse:** restored the direct PC receiver path and serialized TCP writes to prevent overlapping JSON frames. Added the missing `pc_receiver.ps1` receiver, including TCP 9090 commands and UDP 9090 discovery.  
+  Commits: [direct PC routing](https://github.com/vijay3695/Air-remote/commit/4f8a8b2093fac1f2e73117edfb0689f03ea7297), [serialized PC writes](https://github.com/vijay3695/Air-remote/commit/2611c7082d32e42c7c02f46fd8306dab6e65f7de), [receiver](https://github.com/vijay3695/Air-remote/commit/cc7609412862ed1adfec9333d7af1db0e88490c7).
+- **Android TV / Google TV:** replaced the guessed one-byte protocol framing with a protobuf varint codec, correct pairing request/options/configuration flow, RSA public-key-based pairing-secret derivation, a TV-driven remote handshake, key injection, and ping responses. Added framing tests and an MIT notice for the adapted codec.  
+  Commits: [protocol rewrite](https://github.com/vijay3695/Air-remote/commit/bc8c5f84019bf34cefc55ace3740d892e42fdd8e), [pairing request field correction](https://github.com/vijay3695/Air-remote/commit/8b81b475fc5ca2afe14c0ed2b5be57abe7fe530d), [wire tests](https://github.com/vijay3695/Air-remote/commit/cf576916453c51d18ab68350b89bb18707184640).
+- **Pairing UI:** code entry now waits for the TV pairing configuration response instead of opening prematurely. [Commit](https://github.com/vijay3695/Air-remote/commit/d065cfcf8eec454e6b0c6a16fa26d3b7aadf7ac6).
+- **Samsung Tizen:** added per-TV token persistence, authorization-event gating, and self-signed TLS certificate fingerprint checking. [Commit](https://github.com/vijay3695/Air-remote/commit/d0bd8b44613062ee9da712d2448277c0ddf8d761).
+- **LG webOS:** added registration/client-key persistence, TLS fallback, pointer socket acquisition, and pointer movement/click/scroll frames. [Protocol commit](https://github.com/vijay3695/Air-remote/commit/89607df2f673f40e724c3af761dac94009fcb30f).
+- **Roku ECP:** validates the Roku device-info response and supports text input. [Commit](https://github.com/vijay3695/Air-remote/commit/273445fd4797294364e6e9d71d5a97671bc165ad).
+- **Documentation:** README no longer labels every protocol as hardware-verified and now documents Windows receiver setup.
+
+**CI status:** Earlier builds passed, including the Windows routing/pairing UI and protobuf codec tests. One initial Android TV rewrite build failed on a missing `IOException` import; that import was committed and a later build passed. The newest protocol/brand commits still need a final successful head build. CI compilation is not a substitute for pairing/control tests on actual TVs.
+
+
+
 ## 1. Scope and constraints
 
 - Do not edit application source code as part of this report.
@@ -18,7 +38,7 @@
 - Keep all user-facing connection, pairing, and command status truthful.
 - Verify on real hardware, not only mocks or source inspection.
 
-## 2. Current functional status
+## 2. Pre-repair functional status (historical baseline)
 
 | Feature | Current status | Notes |
 |---|---|---|
@@ -35,7 +55,7 @@
 | TV discovery | **Not reliable / unverified** | Discovery results do not guarantee the discovered device supports the selected protocol or is paired. |
 | QR pairing | **Broken** | The QR bitmap generator draws a decorative pattern; it does not encode the pairing payload as a standards-compliant QR code. |
 
-## 3. Confirmed source-level defects
+## 3. Pre-repair source-level defects (historical snapshot)
 
 These findings come from reading the current source. They explain why the app can report success without actually controlling a device.
 
