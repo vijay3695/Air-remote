@@ -576,8 +576,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         val input = EditText(this).apply {
-            hint = "Enter 6-digit code shown on TV"
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "Enter 6-character code shown on TV"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            filters = arrayOf(android.text.InputFilter.LengthFilter(6))
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
         }
@@ -588,7 +589,7 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Verify & Connect") { dialog, _ ->
                 val code = input.text.toString().trim()
-                if (code.length == 6) {
+                if (code.matches(Regex("[0-9A-Fa-f]{6}"))) {
                     Atrpv2Protocol.submitPairingCode(code) { success, msg ->
                         runOnUiThread {
                             if (success) {
@@ -601,7 +602,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    Toast.makeText(this, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Enter all 6 hexadecimal characters from the TV", Toast.LENGTH_SHORT).show()
                 }
                 dialog.dismiss()
             }
