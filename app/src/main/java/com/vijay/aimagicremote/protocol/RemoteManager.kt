@@ -50,11 +50,15 @@ object RemoteManager {
     var currentTargetIp: String = ""
         private set
 
+    @Volatile
+    private var connectionGeneration: Long = 0
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun setTargetType(type: TargetDeviceType) {
         val previous = activeTargetType
         if (previous != type) {
+            connectionGeneration++ // Invalidate callbacks from the old protocol.
             disconnectProtocol(previous)
             isConnected = false
         }
@@ -62,6 +66,8 @@ object RemoteManager {
         Log.i(TAG, "Target device type set to: $type")
     }
 
+    private fun isCurrentConnection(generation: Long, type: TargetDeviceType): Boolean =
+        generation == connectionGeneration && activeTargetType == type
     private fun disconnectProtocol(type: TargetDeviceType) {
         when (type) {
             TargetDeviceType.ANDROID_TV -> Atrpv2Protocol.disconnect()
@@ -81,6 +87,7 @@ object RemoteManager {
         callback: ConnectCallback? = null
     ) {
         setTargetType(targetType)
+        val generation = ++connectionGeneration
         isConnected = false
         val cleanIp = ip.removePrefix("/")
         currentTargetIp = cleanIp
@@ -93,14 +100,17 @@ object RemoteManager {
                 Atrpv2Protocol.initialize(context)
                 Atrpv2Protocol.connect(cleanIp, object : Atrpv2Protocol.ConnectCallback {
                     override fun onConnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -111,14 +121,17 @@ object RemoteManager {
                 SamsungTizenProtocol.initialize(context)
                 SamsungTizenProtocol.connect(cleanIp, object : SamsungTizenProtocol.ConnectCallback {
                     override fun onConnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -129,14 +142,17 @@ object RemoteManager {
                 LgWebOsProtocol.initialize(context)
                 LgWebOsProtocol.connect(cleanIp, object : LgWebOsProtocol.ConnectCallback {
                     override fun onConnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -146,14 +162,17 @@ object RemoteManager {
             TargetDeviceType.ROKU_TCL -> {
                 RokuTclProtocol.connect(cleanIp, object : RokuTclProtocol.ConnectCallback {
                     override fun onConnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -163,16 +182,19 @@ object RemoteManager {
             TargetDeviceType.WINDOWS_PC -> {
                 PcRemoteProtocol.connect(cleanIp, PcRemoteProtocol.DEFAULT_PORT, object : PcRemoteProtocol.ConnectCallback {
                     override fun onConnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
 
                     override fun onConnectionFailed(error: String) {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
 
                     override fun onDisconnected() {
+                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -180,6 +202,7 @@ object RemoteManager {
             }
 
             TargetDeviceType.BLUETOOTH_HID -> {
+                if (!isCurrentConnection(generation, targetType)) return
                 isConnected = false
                 callback?.onConnectionFailed(
                     if (bluetoothController?.isBluetoothAvailable() == true) {
@@ -193,6 +216,7 @@ object RemoteManager {
     }
 
     fun disconnect() {
+        connectionGeneration++ // Invalidate callbacks from the disconnected session.
         disconnectProtocol(activeTargetType)
         isConnected = false
     }
