@@ -66,6 +66,6 @@ jobs:
       - name: Parse Windows receiver script
         shell: pwsh
         run: |
-          $source = Get-Content -Raw .\\pc_receiver.ps1
+          $source = Get-Content -Raw .\pc_receiver.ps1
           [void][scriptblock]::Create($source)
           Write-Host "PowerShell receiver syntax is valid."
