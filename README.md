@@ -75,7 +75,13 @@ For third-party Wi-Fi remote apps to control your TV, specific TV menu settings 
    powershell -ExecutionPolicy Bypass -File .\pc_receiver.ps1
    ```
 
-3. Allow inbound **TCP 9090** and **UDP 9090** in Windows Firewall if Windows asks or discovery/connection fails.
+3. If Windows Firewall blocks discovery or connection, open PowerShell **as Administrator** and add the receiver rules:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Air Remote TCP 9090" -Direction Inbound -Protocol TCP -LocalPort 9090 -Action Allow
+   New-NetFirewallRule -DisplayName "Air Remote UDP 9090" -Direction Inbound -Protocol UDP -LocalPort 9090 -Action Allow
+   ```
+
 4. In Air Remote, choose **Windows PC**, enter the PC's LAN IP, and connect.
 
 The receiver script supports relative mouse movement, left/right click, scroll, key presses, text input, and UDP discovery. Keep the PowerShell window open while using the remote. It does not run as a Windows service and does not control the PC from outside the local network.
