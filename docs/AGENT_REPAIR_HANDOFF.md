@@ -19,6 +19,38 @@ The phone should work like a Magic Remote / gyro air mouse:
 
 The goal is not satisfied by a phone-side pointer animation, changing X/Y labels, sending arbitrary bytes, or claiming success because CI passes. The pointer must visibly move on the actual TV/PC.
 
+## 1B. Critical regression: restore the phone touchpad
+
+**The owner reports that the touchpad has also been broken. Treat this as a regression that must be repaired—not as a new feature request.** Do not focus only on gyro Air Mouse and leave touchpad unusable.
+
+The phone touchpad is a distinct input mode:
+- Finger movement across the phone touch surface must move the real cursor on the selected Windows desktop or supported TV.
+- Touchpad movement must work without requiring gyro/Air Mouse mode or sensor calibration.
+- Touchpad tap/click, press-and-hold/drag, and scrolling must be preserved if they existed before the regression; inspect the last known working revision and current UI before deciding what is supported.
+- Switching between Touchpad and Air Mouse must not leave either mode's listeners active, send duplicate movement, or route input to a stale target.
+- Keep touchpad gesture handling separate from gyro sensor handling. Both may feed a shared pointer transport, but do not merge their lifecycle or accidentally disable touch input when starting/stopping Air Mouse.
+- Restore existing touchpad UI, gestures, sensitivity/axis mapping, connection behavior, and target routing. Do not redesign or remove it as a shortcut.
+
+### Touchpad recovery procedure
+
+1. Find the last commit/revision where the owner says touchpad worked. Compare it with current main using git history and diffs.
+2. Identify the exact regression-causing changes. Do not assume the latest commit is the only cause.
+3. Trace touch input end-to-end: phone touch events → gesture/delta calculation → selected target transport → receiver/TV pointer → real cursor.
+4. Test touchpad independently before testing Air Mouse, then test switching between both modes.
+5. Verify touchpad remains functional after app pause/resume, reconnect, target change, and Air Mouse start/stop.
+6. Preserve touchpad functionality while repairing Windows and TV Air Mouse. Add regression tests so future sensor/protocol changes cannot break touchpad.
+
+### Touchpad acceptance criteria
+
+- [ ] Touchpad UI and touch gestures are present and usable.
+- [ ] Finger movement moves the real Windows cursor.
+- [ ] Finger movement moves the real TV cursor on each platform that claims touchpad support.
+- [ ] Existing tap/click, drag, and scroll behavior is preserved where supported.
+- [ ] Touchpad works without gyro calibration or Air Mouse activation.
+- [ ] Switching Touchpad ↔ Air Mouse does not cause stuck listeners, duplicate deltas, or stale-target input.
+- [ ] Touchpad works after reconnect and app lifecycle changes.
+- [ ] Actual device tests are recorded; mock/CI tests alone are not declared complete.
+
 ## 1A. Shared user experience: cursor must be visible on BOTH TV and desktop
 
 This is a cross-platform Air Mouse requirement, not an optional visual enhancement:
