@@ -55,17 +55,22 @@ object RokuTclProtocol {
                     .get()
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful || response.code == 200) {
-                    isConnected = true
-                    Log.i(TAG, "Connected to TCL / Roku TV at $cleanIp:$ECP_PORT")
-                    withContext(Dispatchers.Main) {
-                        callback?.onConnected()
-                    }
-                } else {
-                    isConnected = false
-                    withContext(Dispatchers.Main) {
-                        callback?.onConnectionFailed("TCL / Roku TV returned HTTP status ${response.code}")
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    val isRokuEcp = response.isSuccessful &&
+                        body.contains("<device-info", ignoreCase = true) &&
+                        body.contains("roku", ignoreCase = true)
+                    if (isRokuEcp) {
+                        isConnected = true
+                        Log.i(TAG, "Roku ECP device-info verified at $cleanIp:$ECP_PORT")
+                        withContext(Dispatchers.Main) { callback?.onConnected() }
+                    } else {
+                        isConnected = false
+                        withContext(Dispatchers.Main) {
+                            callback?.onConnectionFailed(
+                                "The endpoint at $cleanIp:$ECP_PORT did not return a valid Roku ECP device-info response (HTTP ${response.code})."
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -73,6 +78,28 @@ object RokuTclProtocol {
                 Log.e(TAG, "TCL / Roku connection failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     callback?.onConnectionFailed("Could not reach TCL TV at $cleanIp:8060: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun sendText(text: String) {
+        val ip = currentTvIp ?: return
+        if (!isConnected || text.isEmpty()) return
+        scope.launch {
+            for (character in text) {
+                val encoded = java.net.URLEncoder.encode(character.toString(), "UTF-8")
+                val request = Request.Builder()
+                    .url("http://$ip:$ECP_PORT/keypress/Lit_$encoded")
+                    .post("".toRequestBody("text/plain".toMediaType()))
+                    .build()
+                try {
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) Log.w(TAG, "Roku text input returned HTTP ${response.code}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Roku text input failed: ${e.message}")
+                    return@launch
                 }
             }
         }
