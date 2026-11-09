@@ -279,7 +279,7 @@ object Atrpv2Protocol {
                     AtvWire.int(3, 1)           // ROLE_TYPE_INPUT
                 )
                 sendPairingEnvelope(socket, 20, options) // pairing_option
-                expectPayload(socket, 21, "pairing options")
+                expectPayload(socket, 20, "pairing options")
 
                 val configuration = AtvWire.message(
                     AtvWire.bytes(1, encoding),
@@ -392,42 +392,47 @@ object Atrpv2Protocol {
             try {
                 if (ip.isBlank()) throw IOException("Enter a TV IP address.")
                 Log.i(TAG, "Opening Android TV Remote v2 control channel to $ip:$CONTROL_PORT")
-                val socket = newTlsSocket(ip, CONTROL_PORT, timeoutMs = 10000)
-                controlSocket = socket
-
-                // The TV initiates the remote session with RemoteConfigure.
-                val first = readRemoteMessage(socket)
-                if (first.none { it.number == 1 }) {
-                    throw IOException("TV did not send RemoteConfigure. Pair this app with the TV first.")
-                }
-                val features = first.nested(1).number(1)
-                if (features == 0) throw IOException("TV did not advertise remote-control capabilities.")
-
-                val deviceInfo = AtvWire.message(
-                    AtvWire.int(3, 1),
-                    AtvWire.string(4, "1"),
-                    AtvWire.string(5, "com.vijay.aimagicremote"),
-                    AtvWire.string(6, "1.0")
-                )
-                val remoteConfigure = AtvWire.message(
-                    AtvWire.int(1, features),
-                    AtvWire.bytes(2, deviceInfo)
-                )
-                sendRemoteMessage(socket, 1, remoteConfigure)
-
-                val second = readRemoteMessage(socket)
-                if (second.none { it.number == 2 }) {
-                    throw IOException("TV did not acknowledge RemoteConfigure.")
-                }
-                sendRemoteMessage(socket, 2, AtvWire.message(AtvWire.int(1, features))) // RemoteSetActive
-
-                // RemoteStart is the actual ready signal. Ignore/respond to pings while waiting.
+                // Android TV Remote control uses direct RemoteMessage protobufs.
+                // Configure, SetActive, ping, and RemoteStart may arrive in varying order.
                 socket.soTimeout = 15000
+                var features = 0
+                var configureSent = false
+                var setActiveRequested = false
+                var setActiveSent = false
                 var ready = false
+
                 while (!ready) {
                     val message = readRemoteMessage(socket)
                     when {
-                        message.any { it.number == 40 } -> ready = true // RemoteStart
+                        message.any { it.number == 1 } -> {
+                            features = message.nested(1).number(1) and (1 or 2 or 4 or 32 or 64 or 512)
+                            if (features and 2 == 0) {
+                                throw IOException("TV did not advertise key-control support.")
+                            }
+                            val deviceInfo = AtvWire.message(
+                                AtvWire.int(3, 1),
+                                AtvWire.string(4, "1"),
+                                AtvWire.string(5, "com.vijay.aimagicremote"),
+                                AtvWire.string(6, "1.0")
+                            )
+                            val remoteConfigure = AtvWire.message(
+                                AtvWire.int(1, features),
+                                AtvWire.bytes(2, deviceInfo)
+                            )
+                            sendRemoteMessage(socket, 1, remoteConfigure)
+                            configureSent = true
+                            if (setActiveRequested && !setActiveSent) {
+                                sendRemoteMessage(socket, 2, AtvWire.message(AtvWire.int(1, features)))
+                                setActiveSent = true
+                            }
+                        }
+                        message.any { it.number == 2 } -> {
+                            setActiveRequested = true
+                            if (features != 0 && configureSent && !setActiveSent) {
+                                sendRemoteMessage(socket, 2, AtvWire.message(AtvWire.int(1, features)))
+                                setActiveSent = true
+                            }
+                        }
                         message.any { it.number == 8 } -> {
                             val pingId = message.nested(8).number(1)
                             synchronized(controlWriteLock) {
@@ -435,6 +440,10 @@ object Atrpv2Protocol {
                                     sendRemoteMessage(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
                                 }
                             }
+                        }
+                        message.any { it.number == 40 } -> {
+                            if (!configureSent) throw IOException("TV sent RemoteStart before configuration.")
+                            ready = true
                         }
                         message.any { it.number == 3 } -> throw IOException("TV rejected the remote session.")
                     }
@@ -449,12 +458,12 @@ object Atrpv2Protocol {
                 readerJob = scope.launch {
                     try {
                         while (isActive && controlSocket === socket && !socket.isClosed) {
-                            val message = readEnvelope(socket)
+                            val message = readRemoteMessage(socket)
                             if (message.any { it.number == 8 }) {
                                 val pingId = message.nested(8).number(1)
                                 synchronized(controlWriteLock) {
                                     if (controlSocket === socket && !socket.isClosed) {
-                                        sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                                        sendRemoteMessage(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
                                     }
                                 }
                             }
