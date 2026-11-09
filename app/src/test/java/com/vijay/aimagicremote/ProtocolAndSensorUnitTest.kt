@@ -112,6 +112,9 @@ class ProtocolAndSensorUnitTest {
     @Test
     fun testRemoteManagerTargetDeviceTypes() {
         assertEquals(RemoteManager.TargetDeviceType.ANDROID_TV, RemoteManager.TargetDeviceType.valueOf("ANDROID_TV"))
+        assertEquals(RemoteManager.TargetDeviceType.SAMSUNG_TIZEN, RemoteManager.TargetDeviceType.valueOf("SAMSUNG_TIZEN"))
+        assertEquals(RemoteManager.TargetDeviceType.LG_WEBOS, RemoteManager.TargetDeviceType.valueOf("LG_WEBOS"))
+        assertEquals(RemoteManager.TargetDeviceType.ROKU_TCL, RemoteManager.TargetDeviceType.valueOf("ROKU_TCL"))
         assertEquals(RemoteManager.TargetDeviceType.WINDOWS_PC, RemoteManager.TargetDeviceType.valueOf("WINDOWS_PC"))
         assertEquals(RemoteManager.TargetDeviceType.BLUETOOTH_HID, RemoteManager.TargetDeviceType.valueOf("BLUETOOTH_HID"))
     }
