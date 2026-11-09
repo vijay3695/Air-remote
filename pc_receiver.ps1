@@ -102,9 +102,11 @@ function Invoke-AirRemoteKey([string]$Key) {
 function Escape-SendKeysText([string]$Text) {
     # SendKeys treats these characters as control syntax; escape them as literals.
     $result = $Text
-    foreach ($char in @("+", "^", "%", "~", "(", ")", "[", "]", "{", "}")) {
+    foreach ($char in @("+", "^", "%", "~", "(", ")", "[", "]")) {
         $result = $result.Replace($char, "{$char}")
     }
+    # SendKeys uses doubled braces for literal brace characters.
+    $result = $result.Replace("{", "{{").Replace("}", "{}}")
     return $result
 }
 
