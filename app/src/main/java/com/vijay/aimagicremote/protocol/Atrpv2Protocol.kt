@@ -589,4 +589,72 @@ object Atrpv2Protocol {
             }
         }
     }
+
+    /**
+     * Pointer/Mouse motion for Android TV / Google TV.
+     * Stock Android TV Remote v2 does not support pointer injection, so pointer
+     * deltas are mapped to DPAD key events (Directional Pad navigation), giving
+     * Magic Remote-style air-mouse navigation on Android TV and Google TV.
+     *
+     * @param dx horizontal delta (negative = left, positive = right)
+     * @param dy vertical delta (negative = up, positive = down)
+     */
+    @Volatile
+    private var lastPointerKeyTime: Long = 0
+    private val pointerKeyDebounceMs: Long = 180
+    private val pointerDeltaThreshold: Float = 18.0f
+
+    fun sendPointerMove(dx: Float, dy: Float) {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+
+        val absDx = abs(dx)
+        val absDy = abs(dy)
+
+        // Only act on significant movement; pick the dominant axis.
+        if (absDx <= pointerDeltaThreshold && absDy <= pointerDeltaThreshold) return
+
+        val keyCode = if (absDx > absDy) {
+            if (dx > 0) KEY_CODES.RIGHT else KEY_CODES.LEFT
+        } else {
+            if (dy > 0) KEY_CODES.DOWN else KEY_CODES.UP
+        }
+
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey(keyCode, KeyDirection.SHORT, null)
+        }
+    }
+
+    /**
+     * Pointer click (OK/Enter) for Android TV / Google TV.
+     */
+    fun sendPointerClick() {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey(KEY_CODES.OK, KeyDirection.SHORT, null)
+        }
+    }
+
+    /**
+     * Pointer scroll for Android TV / Google TV.
+     * Maps vertical scroll to volume up/down key events.
+     */
+    fun sendPointerScroll(dx: Float, dy: Float) {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+
+        val absDy = abs(dy)
+        if (absDy <= pointerDeltaThreshold) return
+
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey(if (dy > 0) KEY_CODES.VOLUME_DOWN else KEY_CODES.VOLUME_UP, KeyDirection.SHORT, null)
+        }
+    }
 }

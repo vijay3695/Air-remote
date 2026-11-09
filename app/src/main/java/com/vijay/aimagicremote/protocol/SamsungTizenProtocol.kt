@@ -295,4 +295,72 @@ object SamsungTizenProtocol {
             Log.w(TAG, "Ignoring Samsung key command: TV authorization is not ready.")
         }
     }
+
+    /**
+     * Pointer/Mouse motion for Samsung Tizen TV.
+     * Stock Samsung Tizen WebSocket remote control has no native pointer protocol,
+     * so pointer deltas are mapped to directional key events (DPAD-style navigation),
+     * giving Magic Remote-style air-mouse navigation.
+     *
+     * @param dx horizontal delta (negative = left, positive = right)
+     * @param dy vertical delta (negative = up, positive = down)
+     */
+    @Volatile
+    private var lastPointerKeyTime: Long = 0
+    private val pointerKeyDebounceMs: Long = 180
+    private val pointerDeltaThreshold: Float = 18.0f
+
+    fun sendPointerMove(dx: Float, dy: Float) {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+
+        val absDx = abs(dx)
+        val absDy = abs(dy)
+
+        // Only act on significant movement; pick the dominant axis.
+        if (absDx <= pointerDeltaThreshold && absDy <= pointerDeltaThreshold) return
+
+        val key = if (absDx > absDy) {
+            if (dx > 0) "RIGHT" else "LEFT"
+        } else {
+            if (dy > 0) "DOWN" else "UP"
+        }
+
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey(key)
+        }
+    }
+
+    /**
+     * Pointer click (OK/Enter) for Samsung Tizen TV.
+     */
+    fun sendPointerClick() {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey("OK")
+        }
+    }
+
+    /**
+     * Pointer scroll for Samsung Tizen TV.
+     * Maps vertical scroll to volume up/down keys.
+     */
+    fun sendPointerScroll(dx: Float, dy: Float) {
+        if (!isConnected) return
+        val now = System.currentTimeMillis()
+        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
+
+        val absDy = abs(dy)
+        if (absDy <= pointerDeltaThreshold) return
+
+        lastPointerKeyTime = now
+        scope.launch(Dispatchers.IO) {
+            sendKey(if (dy > 0) "VOL_DOWN" else "VOL_UP")
+        }
+    }
 }

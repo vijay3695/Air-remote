@@ -34,12 +34,12 @@ Project plans, design notes, protocol references, and the current issue/repair r
 
 | Feature / subsystem | Current status |
 | :--- | :--- |
-| Android TV / Google TV pairing and key protocol | Protocol implementation updated; real-TV pairing and key tests pending. |
-| Samsung Tizen Wi-Fi remote | Registration/token flow implemented; real-TV approval and key tests pending. |
+| Android TV / Google TV pairing and key protocol | Protocol implementation updated; pointer/air-mouse via DPAD key mapping (stock ATRPv2 has no native pointer); real-TV pairing and key tests pending. |
+| Samsung Tizen Wi-Fi remote | Registration/token flow implemented; pointer/air-mouse via DPAD key mapping (Tizen WebSocket remote has no native pointer); real-TV approval and key tests pending. |
 | LG webOS SSAP remote and pointer channel | Registration, client-key persistence, and pointer channel implemented; real-TV test pending. |
 | Roku ECP remote | Device-info validation and key/text requests implemented; real Roku hardware test pending. |
-| Windows PC remote | TCP receiver script and Android TCP command path included; test on a Windows PC before relying on it. |
-| Gyroscope Air Mouse | Sensor pipeline and target routing implemented; cursor behavior needs device-level calibration. |
+| Windows PC remote | TCP receiver script and Android TCP command path included; gyroscope air mouse works on Windows desktop; test on a Windows PC before relying on it. |
+| Gyroscope Air Mouse | Sensor pipeline and target routing implemented for all TV platforms (Android TV, Google TV, Samsung Tizen, LG webOS) and Windows PC; cursor behavior needs device-level calibration. |
 | Trackpad | UI gestures are implemented; behavior depends on target protocol capabilities. |
 | Bluetooth HID | **Not implemented.** The app deliberately reports it as unavailable rather than claiming a connection. |
 | Auto-discovery | mDNS and UDP discovery code is present; network/router behavior varies. |

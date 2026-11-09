@@ -263,7 +263,10 @@ object RemoteManager {
 
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
-                    Atrpv2Protocol.injectPointer(dx, dy, isAbsolute = false)
+                    Atrpv2Protocol.sendPointerMove(dx, dy)
+                }
+                TargetDeviceType.SAMSUNG_TIZEN -> {
+                    SamsungTizenProtocol.sendPointerMove(dx, dy)
                 }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseMove(dx, dy)
@@ -324,7 +327,10 @@ object RemoteManager {
 
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
-                    Atrpv2Protocol.injectScroll(dx, dy)
+                    Atrpv2Protocol.sendPointerScroll(dx, dy)
+                }
+                TargetDeviceType.SAMSUNG_TIZEN -> {
+                    SamsungTizenProtocol.sendPointerScroll(dx, dy)
                 }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseScroll(dx, dy)
