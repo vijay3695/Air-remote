@@ -73,6 +73,7 @@ object RemoteManager {
 
         when (targetType) {
             TargetDeviceType.ANDROID_TV -> {
+                Atrpv2Protocol.initialize(context)
                 Atrpv2Protocol.connect(cleanIp, object : Atrpv2Protocol.ConnectCallback {
                     override fun onConnected() {
                         isConnected = true
