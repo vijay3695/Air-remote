@@ -869,7 +869,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun onBtnHomeClick() {
-        RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.HOME, "WIN")
+        RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.HOME, "HOME")
     }
 
     fun onBtnPowerClick() {
