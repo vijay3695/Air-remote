@@ -47,12 +47,10 @@ class TvDiscoveryManager(private val context: Context) {
     private val activeListeners = mutableListOf<NsdManager.DiscoveryListener>()
 
     fun startDiscovery(listener: ((List<DeviceInfo>) -> Unit)? = null) {
-        if (isDiscovering) {
-            listener?.invoke(getDiscoveredDevices())
-            return
-        }
-
+        // A rescan must actually restart NSD and UDP discovery, not return the
+        // previous scan's cached devices.
         stopDiscovery()
+        synchronized(devicesLock) { discoveredDevices.clear() }
         isDiscovering = true
         discoveryListener = listener
         Log.i("TvDiscovery", "Starting mDNS & LAN UDP discovery for Android TVs and Windows PCs...")
@@ -61,7 +59,6 @@ class TvDiscoveryManager(private val context: Context) {
             Pair("_androidtvremote._tcp", DeviceType.ANDROID_TV),
             Pair("_androidtvremote2._tcp", DeviceType.ANDROID_TV),
             Pair("_airremote._tcp", DeviceType.WINDOWS_PC),
-            Pair("_workstation._tcp", DeviceType.WINDOWS_PC)
         )
 
         for ((type, devType) in serviceTypes) {
@@ -86,11 +83,16 @@ class TvDiscoveryManager(private val context: Context) {
                 udpSocket.soTimeout = 1500
 
                 val pingMsg = "{\"cmd\":\"ping\"}\n".toByteArray(Charsets.UTF_8)
-                val addresses = listOf("255.255.255.255", "192.168.1.255", "192.168.0.255")
+                val addresses = mutableListOf(InetAddress.getByName("255.255.255.255"))
+                getSubnetBroadcastAddress()?.let { subnetBroadcast ->
+                    if (addresses.none { it.hostAddress == subnetBroadcast.hostAddress }) {
+                        addresses.add(subnetBroadcast)
+                    }
+                }
 
-                for (addr in addresses) {
+                for (address in addresses) {
                     try {
-                        val packet = DatagramPacket(pingMsg, pingMsg.size, InetAddress.getByName(addr), 9090)
+                        val packet = DatagramPacket(pingMsg, pingMsg.size, address, 9090)
                         udpSocket.send(packet)
                     } catch (_: Exception) {}
                 }
@@ -140,6 +142,25 @@ class TvDiscoveryManager(private val context: Context) {
         }
     }
 
+
+    @Suppress("DEPRECATION")
+    private fun getSubnetBroadcastAddress(): InetAddress? {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            ?: return null
+        val dhcp = wifiManager.dhcpInfo ?: return null
+        val ip = dhcp.ipAddress
+        val netmask = dhcp.netmask
+        if (ip == 0 || netmask == 0) return null
+        val broadcast = ip or netmask.inv()
+        val bytes = byteArrayOf(
+            (broadcast and 0xff).toByte(),
+            ((broadcast shr 8) and 0xff).toByte(),
+            ((broadcast shr 16) and 0xff).toByte(),
+            ((broadcast shr 24) and 0xff).toByte()
+        )
+        return runCatching { InetAddress.getByAddress(bytes) }.getOrNull()
+    }
+
     fun stopDiscovery() {
         isDiscovering = false
         for (l in activeListeners) {
@@ -166,6 +187,7 @@ class TvDiscoveryManager(private val context: Context) {
         }
 
         override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+            if (!isDiscovering) return
             val host = serviceInfo.host
             if (host == null) {
                 try {
@@ -228,6 +250,7 @@ class TvDiscoveryManager(private val context: Context) {
         }
 
         override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+            if (!isDiscovering) return
             val host = serviceInfo.host
             val port = serviceInfo.port
             if (host != null) {
