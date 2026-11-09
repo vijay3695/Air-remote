@@ -10,12 +10,45 @@ import com.vijay.aimagicremote.protocol.RokuTclProtocol
 import com.vijay.aimagicremote.protocol.SamsungTizenProtocol
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 
 /**
  * Unit tests for Air Remote Multi-Brand Protocols, 1€ Filter, and Target Routing
  */
 class ProtocolAndSensorUnitTest {
 
+    @Test
+    fun testAtvWireVarintRoundTripAcrossBoundaries() {
+        val values = listOf(0L, 1L, 127L, 128L, 300L, 16_384L, 2_097_151L)
+        for (value in values) {
+            assertEquals(value, AtvWire.readVarint(ByteArrayInputStream(AtvWire.varint(value))))
+        }
+    }
+
+    @Test
+    fun testAtvWireProtobufFieldsRoundTrip() {
+        val encoded = AtvWire.message(
+            AtvWire.int(1, 300),
+            AtvWire.string(2, "Air Remote")
+        )
+        val fields = AtvWire.parse(encoded)
+        assertEquals(300, fields.number(1))
+        assertEquals("Air Remote", String(fields.first { it.number == 2 }.bytes!!, Charsets.UTF_8))
+    }
+
+    @Test
+    fun testAtvWireLengthDelimitedFrameRoundTrip() {
+        val payload = AtvWire.message(AtvWire.int(1, 42), AtvWire.string(2, "frame"))
+        val output = ByteArrayOutputStream()
+        AtvWire.writeFrame(output, payload)
+        assertArrayEquals(payload, AtvWire.readFrame(ByteArrayInputStream(output.toByteArray())))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun testAtvWireRejectsOversizedFrame() {
+        AtvWire.readFrame(ByteArrayInputStream(AtvWire.varint(1_048_577L)))
+    }
     @Test
     fun testOneEuroFilterSmoothing() {
         val filter = OneEuroFilter(minCutoff = 1.0f, beta = 0.007f, dCutoff = 1.0f)
