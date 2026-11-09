@@ -31,10 +31,21 @@ function ConvertTo-UInt32Bits([int]$Value) {
     return [BitConverter]::ToUInt32([BitConverter]::GetBytes($Value), 0)
 }
 
+$script:mouseRemainderX = 0.0
+$script:mouseRemainderY = 0.0
+
 function Invoke-AirRemoteMouseMove([double]$Dx, [double]$Dy) {
-    $x = [int][Math]::Round($Dx)
-    $y = [int][Math]::Round($Dy)
-    [AirRemoteNative]::mouse_event($MouseMove, (ConvertTo-UInt32Bits $x), (ConvertTo-UInt32Bits $y), 0, [UIntPtr]::Zero)
+    # Preserve subpixel deltas from the phone's gyro instead of rounding
+    # every sensor frame independently (which can make slow motion stall).
+    $script:mouseRemainderX += $Dx
+    $script:mouseRemainderY += $Dy
+    $x = [int][Math]::Truncate($script:mouseRemainderX)
+    $y = [int][Math]::Truncate($script:mouseRemainderY)
+    $script:mouseRemainderX -= $x
+    $script:mouseRemainderY -= $y
+    if ($x -ne 0 -or $y -ne 0) {
+        [AirRemoteNative]::mouse_event($MouseMove, (ConvertTo-UInt32Bits $x), (ConvertTo-UInt32Bits $y), 0, [UIntPtr]::Zero)
+    }
 }
 
 function Invoke-AirRemoteClick([string]$Button) {
@@ -100,14 +111,13 @@ function Invoke-AirRemoteKey([string]$Key) {
 }
 
 function Escape-SendKeysText([string]$Text) {
-    # SendKeys treats these characters as control syntax; escape them as literals.
-    $result = $Text
-    foreach ($char in @("+", "^", "%", "~", "(", ")", "[", "]")) {
+    # Escape each original character independently. Replacing braces after
+    # adding SendKeys escape tokens corrupts the tokens and loses text.
+    $result = $Text.Replace("{", "__AIRREMOTE_OPEN_BRACE__").Replace("}", "__AIRREMOTE_CLOSE_BRACE__")
+    foreach ($char in @("+", "^", "%", "~", "(", ")")) {
         $result = $result.Replace($char, "{$char}")
     }
-    # SendKeys uses doubled braces for literal brace characters.
-    $result = $result.Replace("{", "{{}").Replace("}", "{}}")
-    return $result
+    return $result.Replace("__AIRREMOTE_OPEN_BRACE__", "{{}").Replace("__AIRREMOTE_CLOSE_BRACE__", "{}}")
 }
 
 function Invoke-AirRemoteText([string]$Text) {
