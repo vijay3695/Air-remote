@@ -2,6 +2,8 @@ package com.vijay.aimagicremote.protocol
 
 import android.util.Log
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.OutputStream
 import java.net.DatagramPacket
@@ -12,9 +14,12 @@ import java.net.Socket
 import javax.net.SocketFactory
 
 /**
- * Windows PC Remote Protocol (Wi-Fi)
- * Controls Windows PCs (and Mac/Linux) over local Wi-Fi network via TCP/UDP/HTTP.
- * Works with standard PC remote servers, lightweight Python/Node/C# receivers, and HTTP APIs.
+ * Windows PC Remote Protocol (Wi-Fi).
+ *
+ * The Windows receiver uses newline-delimited UTF-8 JSON over TCP (port 9090).
+ * Sensor events can arrive several dozen times per second, so every write must
+ * be serialized: concurrent writes to a TCP OutputStream can interleave JSON
+ * frames and make the receiver discard subsequent mouse events.
  */
 object PcRemoteProtocol {
 
@@ -38,184 +43,161 @@ object PcRemoteProtocol {
     private var tcpSocket: Socket? = null
     private var tcpOutputStream: OutputStream? = null
     private var udpSocket: DatagramSocket? = null
+    @Volatile
+    private var currentPort: Int = DEFAULT_PORT
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // One lock for connection teardown and every outbound command. This keeps
+    // JSON lines intact and prevents a disconnect from closing a stream while
+    // another coroutine is in the middle of writing to it.
+    private val transportMutex = Mutex()
 
     fun getEffectiveIp(): String? {
         val ip = currentPcIp ?: RemoteManager.currentTargetIp
         return if (ip.isNotEmpty()) ip.removePrefix("/") else null
     }
 
-    /**
-     * Connect to Windows PC over Wi-Fi
-     */
     fun connect(ip: String, port: Int = DEFAULT_PORT, callback: ConnectCallback? = null) {
         val cleanIp = ip.removePrefix("/")
         currentPcIp = cleanIp
+        currentPort = port
 
         scope.launch {
-            try {
-                disconnectInternal()
-                Log.i(TAG, "Connecting to Windows PC at $cleanIp:$port...")
-
-                var success = false
-
-                // Try TCP Connection
+            transportMutex.withLock {
                 try {
-                    val socket = SocketFactory.getDefault().createSocket()
-                    socket.connect(InetSocketAddress(cleanIp, port), 4000)
-                    socket.soTimeout = 5000
-                    tcpSocket = socket
-                    tcpOutputStream = socket.getOutputStream()
-                    success = true
-                    Log.i(TAG, "Connected via TCP to $cleanIp:$port")
-                } catch (e: Exception) {
-                    Log.w(TAG, "TCP connection failed: ${e.message}, attempting UDP probing...")
-                }
+                    disconnectInternal()
+                    Log.i(TAG, "Connecting to Windows PC at $cleanIp:$port...")
 
-                // Try UDP Probing
-                if (!success) {
                     try {
-                        val socket = DatagramSocket()
-                        udpSocket = socket
-                        val probePacket = "{\"cmd\":\"ping\"}\n".toByteArray()
-                        val packet = DatagramPacket(probePacket, probePacket.size, InetAddress.getByName(cleanIp), port)
-                        socket.send(packet)
-                        success = true
-                        Log.i(TAG, "Opened UDP channel to $cleanIp:$port")
+                        val socket = SocketFactory.getDefault().createSocket()
+                        socket.connect(InetSocketAddress(cleanIp, port), 4000)
+                        socket.tcpNoDelay = true
+                        socket.soTimeout = 5000
+                        tcpSocket = socket
+                        tcpOutputStream = socket.getOutputStream()
+                        udpSocket?.close()
+                        udpSocket = null
+                        isConnected = true
+                        Log.i(TAG, "Connected via TCP to $cleanIp:$port")
+                        withContext(Dispatchers.Main) { callback?.onConnected() }
                     } catch (e: Exception) {
-                        Log.e(TAG, "UDP setup failed: ${e.message}")
+                        isConnected = false
+                        Log.e(TAG, "TCP connection failed: ${e.message}")
+                        withContext(Dispatchers.Main) {
+                            callback?.onConnectionFailed(
+                                "Could not connect to PC at $cleanIp:$port. Check that the Air Remote receiver is running and Windows Firewall allows it."
+                            )
+                        }
                     }
-                }
-
-                if (success) {
-                    isConnected = true
-                    withContext(Dispatchers.Main) {
-                        callback?.onConnected()
-                    }
-                } else {
+                } catch (e: Exception) {
                     isConnected = false
+                    Log.e(TAG, "PC connection error: ${e.message}", e)
                     withContext(Dispatchers.Main) {
-                        callback?.onConnectionFailed("Could not connect to PC at $cleanIp. Ensure PC receiver server is running on local network.")
+                        callback?.onConnectionFailed(e.message ?: "Connection error")
                     }
-                }
-            } catch (e: Exception) {
-                isConnected = false
-                Log.e(TAG, "PC Connection error: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    callback?.onConnectionFailed(e.message ?: "Connection error")
                 }
             }
         }
     }
 
-    /**
-     * Disconnect from Windows PC
-     */
     fun disconnect() {
         scope.launch {
-            disconnectInternal()
+            transportMutex.withLock {
+                disconnectInternal()
+            }
         }
     }
 
     private fun disconnectInternal() {
         try {
             tcpOutputStream?.close()
+        } catch (_: Exception) {
+        }
+        try {
             tcpSocket?.close()
+        } catch (_: Exception) {
+        }
+        try {
             udpSocket?.close()
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         tcpOutputStream = null
         tcpSocket = null
         udpSocket = null
         isConnected = false
     }
 
-    /**
-     * Send Mouse Move (pointer motion deltas) over Wi-Fi
-     */
     fun sendMouseMove(dx: Float, dy: Float) {
-        val ip = getEffectiveIp() ?: return
-        val json = JSONObject().apply {
+        sendCommand(JSONObject().apply {
             put("cmd", "mouse_move")
             put("dx", dx)
             put("dy", dy)
-        }
-        sendPayload(ip, json.toString())
+        })
     }
 
-    /**
-     * Send Mouse Click (left, right, middle, double)
-     */
     fun sendMouseClick(button: String = "left") {
-        val ip = getEffectiveIp() ?: return
-        val json = JSONObject().apply {
+        sendCommand(JSONObject().apply {
             put("cmd", "click")
             put("button", button)
-        }
-        sendPayload(ip, json.toString())
+        })
     }
 
-    /**
-     * Send Mouse Scroll
-     */
     fun sendMouseScroll(dx: Float, dy: Float) {
-        val ip = getEffectiveIp() ?: return
-        val json = JSONObject().apply {
+        sendCommand(JSONObject().apply {
             put("cmd", "scroll")
             put("dx", dx)
             put("dy", dy)
-        }
-        sendPayload(ip, json.toString())
+        })
     }
 
-    /**
-     * Send Key command to Windows PC
-     */
     fun sendKey(key: String) {
-        val ip = getEffectiveIp() ?: return
-        val json = JSONObject().apply {
+        sendCommand(JSONObject().apply {
             put("cmd", "key")
             put("key", key)
-        }
-        sendPayload(ip, json.toString())
+        })
     }
 
-    /**
-     * Send Text String to type on Windows PC
-     */
     fun sendText(text: String) {
-        val ip = getEffectiveIp() ?: return
-        val json = JSONObject().apply {
+        sendCommand(JSONObject().apply {
             put("cmd", "type")
             put("text", text)
-        }
-        sendPayload(ip, json.toString())
+        })
     }
 
-    private fun sendPayload(ip: String, payloadStr: String) {
+    private fun sendCommand(json: JSONObject) {
+        val ip = getEffectiveIp() ?: return
+        val data = (json.toString() + "\n").toByteArray(Charsets.UTF_8)
+
         scope.launch {
-            val data = (payloadStr + "\n").toByteArray(Charsets.UTF_8)
-            var sent = false
-
-            // 1. Primary: Use active TCP stream if connected
-            tcpOutputStream?.let { out ->
-                try {
-                    out.write(data)
-                    out.flush()
-                    sent = true
-                } catch (e: Exception) {
-                    Log.w(TAG, "TCP write failed: ${e.message}")
-                    tcpOutputStream = null
+            transportMutex.withLock {
+                if (!isConnected) {
+                    Log.w(TAG, "Dropping PC command: no active receiver connection.")
+                    return@withLock
                 }
-            }
 
-            // 2. Secondary / UDP fallback
-            if (!sent) {
                 try {
-                    val socket = udpSocket ?: DatagramSocket().also { udpSocket = it }
-                    val packet = DatagramPacket(data, data.size, InetAddress.getByName(ip), DEFAULT_PORT)
-                    socket.send(packet)
+                    val out = tcpOutputStream
+                    if (out != null && tcpSocket?.isConnected == true && tcpSocket?.isClosed == false) {
+                        out.write(data)
+                        out.flush()
+                    } else {
+                        isConnected = false
+                        Log.w(TAG, "PC TCP connection is no longer available; command was not sent.")
+                    }
                 } catch (e: Exception) {
-                    Log.w(TAG, "UDP send error: ${e.message}")
+                    isConnected = false
+                    Log.e(TAG, "PC command write failed: ${e.message}", e)
+                    try {
+                        tcpOutputStream?.close()
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        tcpSocket?.close()
+                    } catch (_: Exception) {
+                    }
+                    tcpOutputStream = null
+                    tcpSocket = null
                 }
             }
         }
