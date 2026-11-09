@@ -202,28 +202,42 @@ object Atrpv2Protocol {
         }
     }
 
-    private fun envelope(payloadField: Int, payload: ByteArray): ByteArray =
+    /** PairingMessage has protocol_version/status envelope fields. */
+    private fun pairingEnvelope(payloadField: Int, payload: ByteArray): ByteArray =
         AtvWire.message(
-            AtvWire.int(1, 2), // protocol_version
-            AtvWire.int(2, STATUS_OK), // status
+            AtvWire.int(1, 2),
+            AtvWire.int(2, STATUS_OK),
             AtvWire.bytes(payloadField, payload)
         )
 
-    private fun sendEnvelope(socket: SSLSocket, payloadField: Int, payload: ByteArray) {
-        AtvWire.writeFrame(socket.outputStream, envelope(payloadField, payload))
+    private fun sendPairingEnvelope(socket: SSLSocket, payloadField: Int, payload: ByteArray) {
+        AtvWire.writeFrame(socket.outputStream, pairingEnvelope(payloadField, payload))
     }
 
-    private fun readEnvelope(socket: SSLSocket): List<AtvWire.Field> {
+    private fun readPairingEnvelope(socket: SSLSocket): List<AtvWire.Field> {
         val fields = AtvWire.parse(AtvWire.readFrame(socket.inputStream))
         val status = fields.firstOrNull { it.number == 2 }?.numberValue?.toInt()
         if (status != null && status != STATUS_OK) {
-            throw IOException("TV returned protocol status $status")
+            throw IOException("TV returned pairing protocol status $status")
+        }
+        return fields
+    }
+
+    /** RemoteMessage is a direct protobuf oneof; it has no pairing status/version wrapper. */
+    private fun sendRemoteMessage(socket: SSLSocket, payloadField: Int, payload: ByteArray) {
+        AtvWire.writeFrame(socket.outputStream, AtvWire.bytes(payloadField, payload))
+    }
+
+    private fun readRemoteMessage(socket: SSLSocket): List<AtvWire.Field> {
+        val fields = AtvWire.parse(AtvWire.readFrame(socket.inputStream))
+        if (fields.any { it.number == 3 }) {
+            throw IOException("Android TV reported a RemoteError.")
         }
         return fields
     }
 
     private fun expectPayload(socket: SSLSocket, expectedField: Int, step: String) {
-        val response = readEnvelope(socket)
+        val response = readPairingEnvelope(socket)
         if (response.none { it.number == expectedField }) {
             throw IOException("TV did not acknowledge $step (expected message field $expectedField)")
         }
@@ -253,7 +267,7 @@ object Atrpv2Protocol {
                     AtvWire.string(1, "com.github.airremote/androidTvRemote"),
                     AtvWire.string(2, "Air Remote")
                 )
-                sendEnvelope(socket, 10, request) // pairing_request
+                sendPairingEnvelope(socket, 10, request) // pairing_request
                 expectPayload(socket, 11, "pairing request")
 
                 val encoding = AtvWire.message(
@@ -264,14 +278,14 @@ object Atrpv2Protocol {
                     AtvWire.bytes(1, encoding), // input_encodings
                     AtvWire.int(3, 1)           // ROLE_TYPE_INPUT
                 )
-                sendEnvelope(socket, 20, options) // pairing_option
+                sendPairingEnvelope(socket, 20, options) // pairing_option
                 expectPayload(socket, 21, "pairing options")
 
                 val configuration = AtvWire.message(
                     AtvWire.bytes(1, encoding),
                     AtvWire.int(2, 1) // ROLE_TYPE_INPUT
                 )
-                sendEnvelope(socket, 30, configuration) // pairing_configuration
+                sendPairingEnvelope(socket, 30, configuration) // pairing_configuration
                 expectPayload(socket, 31, "pairing configuration")
 
                 Log.i(TAG, "TV acknowledged pairing configuration; code should now be visible on TV.")
@@ -349,7 +363,7 @@ object Atrpv2Protocol {
                 val socket = pairingSocket ?: throw IOException("Pairing session expired. Start pairing again.")
                 val secret = pairingSecret(pairingCode)
                 val secretMessage = AtvWire.message(AtvWire.bytes(1, secret))
-                sendEnvelope(socket, 40, secretMessage) // pairing_secret
+                sendPairingEnvelope(socket, 40, secretMessage) // pairing_secret
                 expectPayload(socket, 41, "pairing secret")
                 isPaired = true
                 saveTvCertificatePin(currentTvIp ?: "")
@@ -382,7 +396,7 @@ object Atrpv2Protocol {
                 controlSocket = socket
 
                 // The TV initiates the remote session with RemoteConfigure.
-                val first = readEnvelope(socket)
+                val first = readRemoteMessage(socket)
                 if (first.none { it.number == 1 }) {
                     throw IOException("TV did not send RemoteConfigure. Pair this app with the TV first.")
                 }
@@ -399,26 +413,26 @@ object Atrpv2Protocol {
                     AtvWire.int(1, features),
                     AtvWire.bytes(2, deviceInfo)
                 )
-                sendEnvelope(socket, 1, remoteConfigure)
+                sendRemoteMessage(socket, 1, remoteConfigure)
 
-                val second = readEnvelope(socket)
+                val second = readRemoteMessage(socket)
                 if (second.none { it.number == 2 }) {
                     throw IOException("TV did not acknowledge RemoteConfigure.")
                 }
-                sendEnvelope(socket, 2, AtvWire.message(AtvWire.int(1, features))) // RemoteSetActive
+                sendRemoteMessage(socket, 2, AtvWire.message(AtvWire.int(1, features))) // RemoteSetActive
 
                 // RemoteStart is the actual ready signal. Ignore/respond to pings while waiting.
                 socket.soTimeout = 15000
                 var ready = false
                 while (!ready) {
-                    val message = readEnvelope(socket)
+                    val message = readRemoteMessage(socket)
                     when {
                         message.any { it.number == 40 } -> ready = true // RemoteStart
                         message.any { it.number == 8 } -> {
                             val pingId = message.nested(8).number(1)
                             synchronized(controlWriteLock) {
                                 if (controlSocket === socket && !socket.isClosed) {
-                                    sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                                    sendRemoteMessage(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
                                 }
                             }
                         }
@@ -502,7 +516,7 @@ object Atrpv2Protocol {
                 )
                 synchronized(controlWriteLock) {
                     if (controlSocket === socket && isConnected && !socket.isClosed) {
-                        sendEnvelope(socket, 10, payload) // RemoteKeyInject
+                        sendRemoteMessage(socket, 10, payload) // RemoteKeyInject
                     }
                 }
                 callback?.invoke(null)
@@ -545,7 +559,7 @@ object Atrpv2Protocol {
                 )
                 synchronized(controlWriteLock) {
                     val socket = controlSocket ?: return@synchronized
-                    if (isConnected && !socket.isClosed) sendEnvelope(socket, 21, batch)
+                    if (isConnected && !socket.isClosed) sendRemoteMessage(socket, 21, batch)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "TV text send failed", e)
