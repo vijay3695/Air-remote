@@ -215,9 +215,10 @@ object Atrpv2Protocol {
                 val socket = newTlsSocket(ip, PAIRING_PORT)
                 pairingSocket = socket
 
+                // PairingRequest schema: service_name is field 1, client_name is field 2.
                 val request = AtvWire.message(
-                    AtvWire.string(1, "Air Remote"),
-                    AtvWire.string(2, "com.google.android.tv.remote")
+                    AtvWire.string(1, "com.github.airremote/androidTvRemote"),
+                    AtvWire.string(2, "Air Remote")
                 )
                 sendEnvelope(socket, 10, request) // pairing_request
                 expectPayload(socket, 11, "pairing request")
