@@ -57,3 +57,15 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+  windows-receiver:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Parse Windows receiver script
+        shell: pwsh
+        run: |
+          $source = Get-Content -Raw .\\pc_receiver.ps1
+          [void][scriptblock]::Create($source)
+          Write-Host "PowerShell receiver syntax is valid."
