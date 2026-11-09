@@ -3,6 +3,7 @@ package com.vijay.aimagicremote.protocol
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log
+import java.io.IOException
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
