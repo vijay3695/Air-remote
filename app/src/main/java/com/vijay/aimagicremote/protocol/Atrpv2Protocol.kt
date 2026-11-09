@@ -96,6 +96,7 @@ object Atrpv2Protocol {
     @Volatile private var handshakeIp: String? = null
     @Volatile private var pairingHandshake: Boolean = false
     private var readerJob: Job? = null
+    @Volatile private var remoteFeatures: Int = 0
     @Volatile private var imeCounter: Int = 0
     @Volatile private var imeFieldCounter: Int = 0
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -403,6 +404,7 @@ object Atrpv2Protocol {
                     when {
                         message.any { it.number == 1 } -> {
                             features = message.nested(1).number(1) and (1 or 2 or 4 or 32 or 64 or 512)
+                            remoteFeatures = features
                             if (features and 2 == 0) {
                                 throw IOException("TV did not advertise key-control support.")
                             }
@@ -553,6 +555,10 @@ object Atrpv2Protocol {
 
     fun sendText(text: String) {
         if (text.isEmpty() || !isConnected) return
+        if (remoteFeatures and 4 == 0) {
+            Log.w(TAG, "This Android TV Remote Service session did not advertise IME/text support.")
+            return
+        }
         scope.launch {
             try {
                 // RemoteImeBatchEdit: insert text at the current selection. The TV must
