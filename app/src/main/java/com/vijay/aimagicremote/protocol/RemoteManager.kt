@@ -314,6 +314,15 @@ object RemoteManager {
                 TargetDeviceType.ANDROID_TV -> {
                     Atrpv2Protocol.sendText(text)
                 }
+                TargetDeviceType.SAMSUNG_TIZEN -> {
+                    SamsungTizenProtocol.sendText(text)
+                }
+                TargetDeviceType.LG_WEBOS -> {
+                    LgWebOsProtocol.sendText(text)
+                }
+                TargetDeviceType.ROKU_TCL -> {
+                    RokuTclProtocol.sendText(text)
+                }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendText(text)
                 }
