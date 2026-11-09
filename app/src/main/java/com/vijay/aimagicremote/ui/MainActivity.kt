@@ -133,6 +133,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Atrpv2Protocol.initialize(applicationContext)
         setContentView(R.layout.activity_main)
 
         // Bind UI Views
