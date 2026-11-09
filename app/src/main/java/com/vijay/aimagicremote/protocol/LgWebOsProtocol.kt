@@ -366,6 +366,12 @@ object LgWebOsProtocol {
             return
         }
 
+        // Directional keys require the pointer socket. If it's not ready,
+        // log a warning instead of silently failing so users can diagnose.
+        if (pointerName != null) {
+            Log.w(TAG, "LG WebOS $key sent but pointer socket not ready (pointerSocketReady=$pointerSocketReady, isConnected=$isConnected). Pair the TV and wait for pointer channel to open.")
+        }
+
         val uri = when (key) {
             "POWER" -> "ssap://system/turnOff"
             "HOME" -> "ssap://system.launcher/open"

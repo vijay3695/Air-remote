@@ -308,8 +308,8 @@ object SamsungTizenProtocol {
      */
     @Volatile
     private var lastPointerKeyTime: Long = 0
-    private val pointerKeyDebounceMs: Long = 180
-    private val pointerDeltaThreshold: Float = 18.0f
+    private val pointerKeyDebounceMs: Long = 60
+    private val pointerDeltaThreshold: Float = 6.0f
 
     fun sendPointerMove(dx: Float, dy: Float) {
         if (!isConnected) return

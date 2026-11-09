@@ -530,14 +530,25 @@ object Atrpv2Protocol {
         }
         scope.launch {
             try {
-                val payload = AtvWire.message(
-                    AtvWire.int(1, keyCode),
-                    AtvWire.int(2, direction.wireValue)
-                )
-                synchronized(controlWriteLock) {
-                    if (controlSocket === socket && isConnected && !socket.isClosed) {
-                        sendRemoteMessage(socket, 10, payload) // RemoteKeyInject
+                // Some Android TV / Google TV devices require separate DOWN then UP
+                // key events rather than a single SHORT press. Send both to maximize
+                // compatibility across TV brands and firmware versions.
+                val directions = when (direction) {
+                    KeyDirection.SHORT -> listOf(KeyDirection.DOWN, KeyDirection.UP)
+                    else -> listOf(direction)
+                }
+                for (dir in directions) {
+                    val payload = AtvWire.message(
+                        AtvWire.int(1, keyCode),
+                        AtvWire.int(2, dir.wireValue)
+                    )
+                    synchronized(controlWriteLock) {
+                        if (controlSocket === socket && isConnected && !socket.isClosed) {
+                            sendRemoteMessage(socket, 10, payload) // RemoteKeyInject
+                        }
                     }
+                    // Small delay between DOWN and UP so the TV can process both events
+                    if (dir == KeyDirection.DOWN) delay(30)
                 }
                 callback?.invoke(null)
             } catch (e: Exception) {
@@ -593,8 +604,8 @@ object Atrpv2Protocol {
      */
     @Volatile
     private var lastPointerKeyTime: Long = 0
-    private val pointerKeyDebounceMs: Long = 180
-    private val pointerDeltaThreshold: Float = 18.0f
+    private val pointerKeyDebounceMs: Long = 60
+    private val pointerDeltaThreshold: Float = 6.0f
 
     fun sendPointerMove(dx: Float, dy: Float) {
         if (!isConnected) return
