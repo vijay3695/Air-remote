@@ -233,6 +233,9 @@ object RemoteManager {
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseMove(dx, dy)
                 }
+                TargetDeviceType.LG_WEBOS -> {
+                    LgWebOsProtocol.sendPointerMove(dx, dy)
+                }
                 TargetDeviceType.BLUETOOTH_HID -> {
                     Log.w(TAG, "Bluetooth HID pointer rejected: no HID session is connected.")
                 }
@@ -258,8 +261,8 @@ object RemoteManager {
                     SamsungTizenProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.LG_WEBOS -> {
-                    val keyName = if (isRightClick) "BACK" else "OK"
-                    LgWebOsProtocol.sendKey(keyName)
+                    if (isRightClick) LgWebOsProtocol.sendKey("BACK")
+                    else LgWebOsProtocol.sendPointerClick()
                 }
                 TargetDeviceType.ROKU_TCL -> {
                     val keyName = if (isRightClick) "BACK" else "OK"
@@ -288,6 +291,9 @@ object RemoteManager {
                 }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseScroll(dx, dy)
+                }
+                TargetDeviceType.LG_WEBOS -> {
+                    LgWebOsProtocol.sendPointerScroll(dx, dy)
                 }
                 TargetDeviceType.BLUETOOTH_HID -> {
                     Log.w(TAG, "Bluetooth HID scroll rejected: no HID session is connected.")
