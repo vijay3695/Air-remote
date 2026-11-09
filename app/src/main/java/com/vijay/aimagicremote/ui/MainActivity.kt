@@ -313,8 +313,14 @@ class MainActivity : AppCompatActivity() {
         activeTarget = type
         RemoteManager.setTargetType(type)
 
-        targetTvBtn?.setBackgroundColor(if (type == RemoteManager.TargetDeviceType.ANDROID_TV) Color.parseColor("#00E676") else Color.parseColor("#282D3C"))
-        targetTvBtn?.setTextColor(if (type == RemoteManager.TargetDeviceType.ANDROID_TV) Color.parseColor("#0F1115") else Color.parseColor("#A0A5B5"))
+        val isTvTarget = type in setOf(
+            RemoteManager.TargetDeviceType.ANDROID_TV,
+            RemoteManager.TargetDeviceType.SAMSUNG_TIZEN,
+            RemoteManager.TargetDeviceType.LG_WEBOS,
+            RemoteManager.TargetDeviceType.ROKU_TCL
+        )
+        targetTvBtn?.setBackgroundColor(if (isTvTarget) Color.parseColor("#00E676") else Color.parseColor("#282D3C"))
+        targetTvBtn?.setTextColor(if (isTvTarget) Color.parseColor("#0F1115") else Color.parseColor("#A0A5B5"))
 
         targetPcBtn?.setBackgroundColor(if (type == RemoteManager.TargetDeviceType.WINDOWS_PC) Color.parseColor("#00E676") else Color.parseColor("#282D3C"))
         targetPcBtn?.setTextColor(if (type == RemoteManager.TargetDeviceType.WINDOWS_PC) Color.parseColor("#0F1115") else Color.parseColor("#A0A5B5"))
@@ -323,10 +329,12 @@ class MainActivity : AppCompatActivity() {
         targetBtBtn?.setTextColor(if (type == RemoteManager.TargetDeviceType.BLUETOOTH_HID) Color.parseColor("#0F1115") else Color.parseColor("#A0A5B5"))
 
         val targetName = when (type) {
-            RemoteManager.TargetDeviceType.ANDROID_TV -> "Android TV"
+            RemoteManager.TargetDeviceType.ANDROID_TV -> "Android TV / Google TV"
+            RemoteManager.TargetDeviceType.SAMSUNG_TIZEN -> "Samsung Tizen TV"
+            RemoteManager.TargetDeviceType.LG_WEBOS -> "LG webOS TV"
+            RemoteManager.TargetDeviceType.ROKU_TCL -> "Roku TV"
             RemoteManager.TargetDeviceType.WINDOWS_PC -> "Windows PC"
-            RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID"
-            else -> "TV"
+            RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID (unavailable)"
         }
         txtStatus?.text = "Target Mode: $targetName. Click Connect or select a discovered device."
     }
