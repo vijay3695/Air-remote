@@ -24,6 +24,7 @@ import com.vijay.aimagicremote.discovery.TvDiscoveryManager
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
 import com.vijay.aimagicremote.protocol.PcRemoteProtocol
 import com.vijay.aimagicremote.protocol.RemoteManager
+import com.vijay.aimagicremote.remote.TvConnectionService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -730,6 +731,11 @@ class MainActivity : AppCompatActivity() {
                         }
                         txtStatus?.text = "Connected to $deviceTypeStr ($cleanIp)"
                         prefs.edit().putString("last_device_ip", cleanIp).apply()
+                        if (activeTarget == RemoteManager.TargetDeviceType.ANDROID_TV) {
+                            startTvConnectionKeepAlive(cleanIp)
+                        } else {
+                            stopTvConnectionKeepAlive()
+                        }
                         enableRemoteControls(true)
                     }
                 }
@@ -740,6 +746,7 @@ class MainActivity : AppCompatActivity() {
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
                         txtStatus?.text = "Connection Failed: $error"
+                        stopTvConnectionKeepAlive()
                         Toast.makeText(this@MainActivity, "Connection Failed: $error", Toast.LENGTH_LONG).show()
                         enableRemoteControls(false)
                     }
@@ -751,6 +758,7 @@ class MainActivity : AppCompatActivity() {
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
                         txtStatus?.text = "Disconnected from device"
+                        stopTvConnectionKeepAlive()
                         enableRemoteControls(false)
                     }
                 }
@@ -758,8 +766,37 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun startTvConnectionKeepAlive(ip: String) {
+        val intent = Intent(this, TvConnectionService::class.java).apply {
+            action = TvConnectionService.ACTION_KEEP_ALIVE
+            putExtra(TvConnectionService.EXTRA_TV_IP, ip)
+        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Could not start TV foreground connection service", e)
+            txtStatus?.text = "Connected, but background keep-alive could not start: ${e.message}"
+        }
+    }
+
+    private fun stopTvConnectionKeepAlive() {
+        try {
+            val intent = Intent(this, TvConnectionService::class.java).apply {
+                action = TvConnectionService.ACTION_DISCONNECT
+            }
+            startService(intent)
+        } catch (_: Exception) {
+            stopService(Intent(this, TvConnectionService::class.java))
+        }
+    }
+
     private fun disconnectDevice() {
         RemoteManager.disconnect()
+        stopTvConnectionKeepAlive()
         isConnected = false
         btnConnect?.text = "Connect"
         txtStatus?.text = "Disconnected"
