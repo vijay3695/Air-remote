@@ -22,6 +22,7 @@ import com.vijay.aimagicremote.R
 import com.vijay.aimagicremote.bluetooth.BluetoothController
 import com.vijay.aimagicremote.discovery.TvDiscoveryManager
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
+import com.vijay.aimagicremote.protocol.PcRemoteProtocol
 import com.vijay.aimagicremote.protocol.RemoteManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -161,9 +162,14 @@ class MainActivity : AppCompatActivity() {
 
         // Live Pointer update listener for Air Mouse cursor feedback
         bluetoothController?.pointerUpdateListener = { dx, dy ->
-            // Send the sensor movement to the selected remote target.
-            // The UI-only coordinate update is not enough to move the Windows cursor.
-            RemoteManager.sendPointerMove(dx, dy)
+            // Keep the established Windows receiver path direct. The old working
+            // desktop Air Mouse sent gyro deltas straight to the PC TCP receiver;
+            // TV pointer commands continue through the selected protocol manager.
+            if (RemoteManager.activeTargetType == RemoteManager.TargetDeviceType.WINDOWS_PC) {
+                PcRemoteProtocol.sendMouseMove(dx, dy)
+            } else {
+                RemoteManager.sendPointerMove(dx, dy)
+            }
 
             runOnUiThread {
                 airMousePosX = (airMousePosX + dx * 2f).coerceIn(-350f, 350f)
