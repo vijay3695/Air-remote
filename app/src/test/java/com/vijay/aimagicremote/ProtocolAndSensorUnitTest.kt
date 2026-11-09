@@ -2,6 +2,7 @@ package com.vijay.aimagicremote
 
 import com.vijay.aimagicremote.bluetooth.OneEuroFilter
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
+import com.vijay.aimagicremote.protocol.AtvWire
 import com.vijay.aimagicremote.protocol.LgWebOsProtocol
 import com.vijay.aimagicremote.protocol.PcRemoteProtocol
 import com.vijay.aimagicremote.protocol.RemoteManager
