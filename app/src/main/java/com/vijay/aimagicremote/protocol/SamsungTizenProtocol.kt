@@ -288,9 +288,11 @@ object SamsungTizenProtocol {
         val payload = json.toString()
         val ws = activeWebSocket
 
-        if (ws != null) {
+        if (ws != null && isConnected) {
             ws.send(payload)
             Log.d(TAG, "Sent Samsung Tizen key payload: $payload")
+        } else {
+            Log.w(TAG, "Ignoring Samsung key command: TV authorization is not ready.")
         }
     }
 }
