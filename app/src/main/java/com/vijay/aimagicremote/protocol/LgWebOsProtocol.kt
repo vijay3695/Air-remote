@@ -298,6 +298,20 @@ object LgWebOsProtocol {
         isConnected = false
     }
 
+    fun sendText(text: String) {
+        if (!isConnected || text.isEmpty()) return
+        val request = JSONObject().apply {
+            put("id", "text_${System.currentTimeMillis()}")
+            put("type", "request")
+            put("uri", "ssap://com.webos.service.ime/insertText")
+            put("payload", JSONObject().apply {
+                put("text", text)
+                put("replace", 1)
+            })
+        }
+        activeWebSocket?.send(request.toString())
+    }
+
     fun sendPointerMove(dx: Float, dy: Float, down: Int = 0) {
         if (!isConnected) return
         pointerWebSocket?.send("type:move\\ndx:$dx\\ndy:$dy\\ndown:$down\\n\\n")
