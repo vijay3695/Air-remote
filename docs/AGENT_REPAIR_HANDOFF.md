@@ -1,256 +1,298 @@
-# Air Remote — Agent Repair Handoff
+# Air Remote — Air Mouse Repair Handoff for Coding Agent
 
 **Repository:** https://github.com/vijay3695/Air-remote  
-**Target branch:** `main`  
-**Prepared:** 2026-11-09  
-**Purpose:** Give a competent coding agent a concrete, testable repair brief. This document is a handoff, not a claim that the app has been repaired.
+**Branch:** `main`  
+**Updated:** 2026-11-09
 
-## 0. Read these first
+## 1. The actual goal — read this before doing anything
 
-Before changing anything, read the full current versions of:
+**This project is an AIR MOUSE for TVs and Windows PCs. A conventional TV remote is not the product goal.**
+
+The phone should work like a Magic Remote / gyro air mouse:
+
+- Point the phone in the direction you want the cursor to move.
+- A real pointer/cursor moves on the target TV or Windows PC.
+- The user can perform pointer actions such as click, drag, and scroll where supported.
+- Motion should feel stable, responsive, predictable, and properly calibrated.
+
+**Do not spend the project’s main effort on D-pad, Home, Back, volume, text entry, TV remote layouts, or generic remote-control features.** Those are secondary compatibility features only. They must not distract from delivering a real Air Mouse on TVs and Windows.
+
+The goal is not satisfied by a phone-side pointer animation, changing X/Y labels, sending arbitrary bytes, or claiming success because CI passes. The pointer must visibly move on the actual TV/PC.
+
+## 2. Read the repository documentation and inspect current code first
+
+Read the complete current contents of:
 
 - `docs/REFERENCE.md`
 - `docs/Error.md`
 - `docs/README.md`
+- `docs/PROJECT_GUIDE.md`
+- `docs/PROJECT_PLAN.md`
+- `docs/DESIGN.md`
+- `docs/UI_UX_DESIGN_SPEC.md`
 - `README.md`
-- `.github/workflows/android-build.yml`
-- `.github/workflows/release-apk.yml`
+- all current Air Mouse, sensor, connection, and receiver code
+- current GitHub Actions workflows and recent commit history
 
-Then inspect the complete current source and git history. Some sections of `docs/Error.md` describe a **historical pre-repair snapshot**; do not blindly apply those old findings. Verify every issue against the current `main` source.
+Some documentation contains historical findings and prior “repair updates.” Verify all claims against the current code and actual owner test results. **The owner reports prior attempted fixes did not work and the project regressed. Do not assume old commits or reports are correct.**
 
-The owner has repeatedly reported that previous repairs did not make the app work. Treat the owner's device results as authoritative over optimistic comments, logs, or old assistant reports.
+## 3. Required first deliverable: map the actual Air Mouse data path
 
-## 1. Owner's actual requirements and current reported status
+Trace the full real-time path for each target:
 
-The app is intended to be a phone-based remote with:
+`phone sensors → orientation/gravity processing → calibration/recenter → smoothing/filter → sensitivity/axis mapping → pointer delta → selected transport → receiver/protocol → OS/TV cursor`
 
-- Windows PC Wi-Fi Air Mouse (the only feature the owner has reported working, but it needs calibration and has recently regressed).
-- Android TV / Google TV remote control and pairing.
-- A real TV Air Mouse / Magic Remote-like pointer experience, not merely a pointer coordinate display on the phone.
-- Later/secondary targets: LG webOS, Samsung Tizen, Roku OS.
-- Honest target-specific capabilities; no generic “works on all TVs” claim.
+Identify exactly where each path stops working. Document:
 
-**Owner-reported baseline:** Windows Air Mouse previously worked (with calibration). TV pairing/control was not working. The owner says recent changes have broken things and wants the entire project repaired. Verify the Windows regression immediately before broad refactoring.
+- which sensor is used and why;
+- whether motion is based on rotation/orientation or raw gyro integration;
+- coordinate system, screen/TV orientation, axis inversion and scaling;
+- calibration and recenter behavior;
+- filtering, dead zone, drift and latency;
+- transport protocol and packet schema;
+- receiver-side cursor injection;
+- click/drag/scroll support;
+- disconnect, reconnect, and stale-session behavior.
 
-## 2. Critical product distinction: “Air Mouse” is not just sending gyro deltas
+Do not “fix” a layer until you have traced and reproduced the failure. Do not confuse sensor activity with cursor movement.
 
-The app must not show or claim a TV cursor merely because:
+## 4. Priority 1 — Restore and perfect Windows Air Mouse
 
-- the phone sensor emits motion,
-- local phone coordinates change,
-- a socket is open,
-- bytes were written,
-- a protocol callback ran,
-- CI builds successfully.
+Windows Air Mouse was the only path the owner previously reported working, although it needed calibration. The owner now reports that prior changes broke functionality. **Restore this before working on additional TV brands.**
 
-A TV cursor appears only if the selected TV platform has a real pointer-input mechanism and the TV accepts it.
+Inspect at least:
 
-### Platform capability reality
-
-- **Windows PC:** The app can move the Windows cursor through its companion receiver. This is the primary working Air Mouse path to restore first.
-- **LG webOS:** Has a native SSAP pointer channel on compatible TVs. This is the most plausible native TV pointer implementation. Registration, pointer-socket readiness, frame format, click/scroll and disconnect behavior must be verified against a real webOS TV.
-- **Android TV / Google TV:** Android TV Remote v2 is a remote-key/text/state protocol; it does **not** provide a standard general-purpose gyro mouse pointer injection command. Do not invent a protobuf field or HTTP fallback. A TV-side companion app/accessibility approach or a genuine Bluetooth HID mouse path would be a separate feature with additional setup/limitations. The phone-only app cannot promise a cursor on arbitrary Android TV devices using ATRPv2 alone.
-- **Samsung Tizen:** Do not claim a generic mouse cursor unless a supported native pointer/HID route is implemented and tested. Remote key protocol is not equivalent to pointer input.
-- **Roku OS:** ECP remote commands do not provide a generic gyro pointer. Do not claim Magic Remote functionality.
-- **Bluetooth HID:** “Phone acts as Bluetooth mouse” requires the Android phone to act as a HID peripheral/device, not merely connect as a Bluetooth client. Verify platform/API/device feasibility. If unavailable, label it unavailable rather than falsely connected.
-
-The UI must distinguish **TV remote control**, **trackpad/focus navigation**, and **actual air-mouse pointer** as separate capabilities.
-
-## 3. Repair order — do not skip ahead
-
-### Phase A — Establish a clean, reproducible baseline
-
-1. Record the current `main` SHA and inspect the latest CI run for that exact SHA.
-2. Build the existing project without changing code; record exact build result and warnings.
-3. Inspect app crash logs, test failures, GitHub Actions workflow logs, and the owner's documented errors.
-4. Check for duplicate protocol connection attempts, stale IP auto-connect, false connection states, and UI commands enabled while disconnected.
-5. Produce a short baseline table: feature, current source path, observed result, evidence, status.
-6. Do not edit/release until the baseline is documented.
-
-### Phase B — Restore Windows PC Air Mouse first (regression blocker)
-
-Relevant files to inspect:
-
+- `app/src/main/java/com/vijay/aimagicremote/bluetooth/BluetoothController.kt`
 - `app/src/main/java/com/vijay/aimagicremote/protocol/PcRemoteProtocol.kt`
 - `app/src/main/java/com/vijay/aimagicremote/ui/MainActivity.kt`
-- `app/src/main/java/com/vijay/aimagicremote/bluetooth/BluetoothController.kt`
-- Windows receiver script(s), especially `pc_receiver.ps1` if present.
-- Windows receiver setup and protocol documentation.
+- the Windows receiver, including `pc_receiver.ps1` if present
+- all Air Mouse mode, target selection, sensor listener, calibration, and receiver documentation
 
-Tasks:
+### Required repair
 
-1. Trace one gyro sample end-to-end: sensor → calibration/filter → pointer callback → target routing → TCP JSON line → receiver parser → Windows cursor API.
-2. Confirm phone and receiver agree on packet schema, line framing, coordinate units, sensitivity, and command names.
-3. Keep all receiver writes serialized; prevent concurrent writes from corrupting newline-delimited JSON.
-4. Make receiver startup, Windows firewall, network profile, IP/port, and permission instructions explicit.
-5. Verify discovery and TCP command path separately. UDP discovery must not be mistaken for command delivery.
-6. Check pointer movement, click, double-click, drag, scroll, D-pad, keyboard/text, connection loss and reconnect separately.
-7. Fix calibration as a real guided process: neutral pose, sample collection, stability validation, recenter, test movement, save settings. Do not say “calibrated” after merely clearing a bias/filter.
-8. Do not change the Windows wire protocol without updating both Android and receiver and adding contract tests.
+1. Reproduce and fix the actual Windows regression. Compare the current code with the last known owner-working revision if needed; inspect git history rather than guessing.
+2. Trace one motion sample from Android sensor all the way to the Windows cursor.
+3. Confirm that Air Mouse mode actually enables the correct sensor/listener and that target routing sends deltas to the Windows receiver.
+4. Confirm phone and receiver agree on transport, IP, port, packet format, newline framing, units, axis mapping, and commands.
+5. Ensure TCP writes are serialized and complete JSON frames cannot interleave.
+6. Ensure fractional movement is accumulated rather than discarded by rounding tiny sensor deltas.
+7. Verify UDP is used for discovery only unless the receiver explicitly supports pointer commands over UDP.
+8. Implement real calibration—not just resetting a filter or bias variable:
+   - neutral pose / reference orientation;
+   - sample collection and stability validation;
+   - recenter;
+   - axis and sensitivity test;
+   - drift check;
+   - clear recalibration flow and saved settings if appropriate.
+9. Fix drift, jitter, sensitivity, axis inversion, dead zone, smoothing, and latency based on measured behavior.
+10. Test actual cursor movement, click, drag, scroll, and receiver reconnection separately. Do not advertise unsupported actions.
+11. Ensure the receiver starts reliably, documents Windows firewall/network requirements, and reports useful connection errors.
+12. Preserve working behavior while fixing other code. Avoid unrelated refactors.
 
-**Acceptance:** On a real Windows PC with the receiver running, the owner can connect, calibrate, and move the actual Windows cursor smoothly; click/scroll and other claimed commands are separately verified. No phone-only coordinate display counts.
+### Windows acceptance criteria
 
-### Phase C — Android TV / Google TV remote (not cursor) pairing and keys
+On the owner’s actual Windows PC:
 
-Relevant files:
+- [ ] App connects to the correct receiver.
+- [ ] Calibration succeeds and is understandable.
+- [ ] Pointing phone moves the **real Windows cursor** in the expected direction.
+- [ ] Motion is smooth, stable, responsive, and does not drift excessively.
+- [ ] Recenter/recalibration works.
+- [ ] Click/drag/scroll work if claimed.
+- [ ] Disconnect/reconnect works.
+- [ ] No regression in existing keyboard/remote behavior.
 
-- `Atrpv2Protocol.kt`
-- `AtvWire.kt`
-- `RemoteManager.kt`
-- pairing UI in `MainActivity.kt`
-- `ProtocolAndSensorUnitTest.kt`
+A mock server and CI are useful, but do not replace the actual Windows cursor test.
 
-Use a proven implementation as the protocol source of truth, not guessed packets. Compare against the current `tronikos/androidtvremote2` project and/or another actively tested implementation. Verify license and preserve required notices before copying/adapting code.
+## 5. Priority 2 — Real Air Mouse on TVs (the central unresolved challenge)
 
-Reference: https://github.com/tronikos/androidtvremote2
+**The TV must display and move a real pointer.** The Android phone alone cannot force an arbitrary TV to display a cursor through a generic remote protocol. The coding agent must investigate and implement a viable pointer transport for each platform, not assume all TVs behave alike.
 
-Requirements:
+### 5.1 LG webOS — investigate native Magic Remote pointer support first
 
-1. Correct pairing protobuf schema, varint-delimited framing, TLS client certificate generation and persistence, code/secret derivation, and certificate reuse.
-2. Correct control-channel handshake and readiness state machine; do not mark connected just after TLS or socket creation.
-3. Keep a persistent read loop and handle TV ping/keepalive, errors, disconnects, and reconnects.
-4. Pairing UI must wait for actual TV protocol events: request → options/configuration → TV displays code → user enters code → secret accepted → certificate trusted → remote session ready.
-5. Wrong code, timeout, rejection, TV not reachable, stale pairing and retry must show useful errors and not falsely report success.
-6. Verify D-pad, Back, Home, volume, power (if supported), text/IME and state notifications individually.
-7. Test against at least one real Android TV/Google TV device. Emulator or mock success is useful but is not hardware acceptance.
-8. Keep Android TV Air Mouse explicitly marked **not supported by ATRPv2** until a separate viable cursor solution is actually implemented and tested.
+Relevant code: `LgWebOsProtocol.kt`
 
-### Phase D — LG webOS pointer support
+LG webOS is the most promising direct TV target because compatible models expose a native SSAP pointer channel.
 
-Relevant file: `LgWebOsProtocol.kt`.
+Required:
 
-1. Implement and test SSAP registration, pairing prompt approval, client-key persistence and reconnection.
-2. Check every response/error; distinguish registered/authorized from merely WebSocket-open.
-3. Request only the permissions needed for implemented commands.
-4. Acquire the pointer socket only after the TV's valid response and parse its returned socket path.
-5. Confirm pointer socket is actually ready before sending pointer frames.
-6. Verify the exact pointer protocol/frame format against a real webOS TV and reliable implementation.
-7. Test movement, click, scroll, key navigation, socket failure, TV rejection, reconnect, and client-key reuse.
-8. Do not send invented pointer bytes or claim pointer support based on a local callback.
+1. Confirm registration, pairing approval, and client-key persistence.
+2. Correctly request and parse the pointer socket/channel from the TV.
+3. Treat pointer socket readiness as separate from the main WebSocket registration.
+4. Verify the exact pointer message format against a known working open-source implementation and real TV.
+5. Send gyro-derived movement through that pointer channel.
+6. Implement click, drag and scroll only when protocol support is verified.
+7. Verify axis mapping, sensitivity, latency, reconnect, pointer socket closure, and TV firmware differences.
+8. Do not claim LG support based only on socket opening or callback firing.
 
-### Phase E — Samsung Tizen / Roku, only after A–D are stable
+**Acceptance:** actual LG TV cursor moves when the phone is tilted, with working calibration and tested pointer actions.
 
-**Samsung Tizen**
-- Correct WebSocket authorization/approval, token capture and secure persistence, reconnect using token, and response handling.
-- Do not claim cursor support unless a real supported pointer mechanism is proven.
-- Test supported commands against real TV models/firmware.
+### 5.2 Android TV / Google TV — do not fake pointer injection
 
-**Roku OS**
-- Keep Roku ECP separate from TCL Android TV/Google TV.
-- Verify ECP permission, device identity, HTTP status and command response.
-- ECP is remote control, not general pointer injection.
-- Test supported keys/text on real Roku hardware.
+Relevant code: `Atrpv2Protocol.kt`, `AtvWire.kt`, `RemoteManager.kt`
 
-Do not launch all TV protocols simultaneously from one target selection. User must select platform or explicitly confirm a well-founded detection result.
+Android TV Remote Protocol v2 provides remote-control commands, but it does **not** define a standard general-purpose gyro mouse pointer injection command.
 
-### Phase F — Fix UI, state, and truthfulness across all targets
+The agent must research and choose a real viable approach, then prove it:
 
-Use one explicit state machine, e.g.:
+- **TV-side companion receiver app:** phone sends motion to a companion app running on TV; companion app uses an officially supported pointer/Accessibility mechanism if available. Investigate whether cursor injection is actually possible on target Android TV versions, what permission/setup is required, and what happens when the companion is killed.
+- **Bluetooth HID mouse:** investigate whether the phone can act as a Bluetooth HID peripheral/device on supported Android versions and whether target TVs accept it as a mouse. A Bluetooth client connection is not equivalent to a phone acting as a HID mouse. Verify API and device support; do not mark connected unless a real HID session exists.
+- Other genuinely supported approaches may be evaluated, but must include compatibility limits, required user setup, and real-device proof.
 
-`Disconnected → Discovering → Connecting → Pairing/Authorizing → Connected/Ready → Reconnecting → Failed`
+Do not invent protobuf pointer fields, send unsupported ATRPv2 pointer frames, or claim Android TV cursor support based on phone-local coordinates.
 
-Requirements:
+**Acceptance:** On an actual Android TV/Google TV, the user sees a real cursor and can move it with the phone. If no viable universal method exists, clearly report which TV models/methods are supported and what companion/setup is required. Do not call the feature finished.
 
-- Only the selected platform protocol is active.
-- “Connected” means protocol-level ready, not Bluetooth enabled, IP found, TLS opened, or WebSocket opened.
-- Disable/gate commands when disconnected or not authorized.
-- Surface meaningful error messages to the user.
-- Discovery, platform identification, pairing, connection readiness, and command acceptance are separate states.
-- Remove decorative/fake QR pairing. Only show QR if it is a real encoded payload and a real supported TV-side scanner exists.
-- Remove or rename nonfunctional Bluetooth HID and unsupported Air Mouse controls.
-- Never use logs such as “sent”, “delivered”, “verified”, or “ACK” unless that precise event is proven. Use “write attempted” when that is all the code knows.
+### 5.3 Samsung Tizen
 
-## 4. Architecture / implementation rules
+Investigate whether supported Samsung TV models provide a usable pointer/HID path for a phone air mouse. WebSocket key commands are not mouse movement.
 
-- Avoid a large rewrite until Windows is restored and current defects are reproduced.
-- Keep each protocol isolated behind a platform-specific adapter with clear supported capabilities.
-- Keep protocol code testable without Android UI where possible.
-- Avoid blocking the main thread. Serialize writes per socket and preserve frame boundaries.
-- Handle cancellation, timeout, socket closure, reconnect, and stale connection callbacks.
-- Do not let one protocol's failure/connected callback overwrite another target's state.
-- Do not auto-connect to stale saved IPs without confirming target identity.
-- Use secure storage for TV tokens/client keys/certificates; never log secrets.
-- Check MIT/Apache/GPL license terms before reusing any candidate code. GPL components may impose source-sharing obligations; do not copy them casually.
-- Do not change dependencies/build settings/workflows just to make CI green. Keep changes minimal and evidence-driven.
-- No cloud/server backend is needed; local Wi-Fi control and local Windows receiver are the intended architecture.
+- Find a documented, tested pointer mechanism or compatible HID route.
+- Verify model/firmware constraints and required TV settings.
+- Do not advertise Air Mouse if only D-pad remote keys work.
+- Report unsupported models honestly.
 
-## 5. Test strategy (required)
+### 5.4 Roku OS
+
+Roku ECP is a remote-control API, not a general gyro pointer protocol. Do not treat ECP key commands as Air Mouse.
+
+- Research whether a genuine pointer/HID method exists for supported Roku hardware.
+- If not, label Roku Air Mouse unsupported rather than spending time on unrelated remote buttons.
+- Do not confuse Roku-based TCL TVs with TCL Android TV/Google TV.
+
+### 5.5 “Any TV” is not a magic universal capability
+
+Do not promise every TV supports a cursor. Build a truthful support matrix with actual tested models and mechanisms. Prioritize a working TV implementation (LG webOS and/or a proven Android TV companion/HID solution) rather than shallow, non-working code for many brands.
+
+## 6. Motion engine and calibration requirements
+
+Inspect the complete sensor implementation and fix based on observed problems.
+
+- Prefer stable orientation-relative motion and a well-defined neutral reference over unbounded gyro integration.
+- Make axes consistent with phone orientation and target display orientation.
+- Provide explicit recenter/calibration and explain the required phone pose.
+- Validate sensor availability and sample quality.
+- Prevent excessive drift when the phone is stationary.
+- Avoid sudden jumps after calibration, mode changes, app resume, or reconnect.
+- Tune filter, dead zone, sensitivity, acceleration, and smoothing based on real measurements.
+- Make calibration state visible and preserve settings appropriately.
+- Keep phone-side diagnostic coordinates clearly labeled as diagnostics; never present them as proof that a TV/PC cursor moved.
+
+## 7. Architecture and scope
+
+- Main feature: **Air Mouse**.
+- Windows receiver and TV pointer transports are the main deliverables.
+- TV remote keys are secondary and must not take priority over Air Mouse.
+- Keep each target’s pointer transport separate and capability-aware.
+- One selected target/session at a time; do not spray commands across all TV protocols.
+- Use explicit connection states: disconnected, connecting, pairing/authorizing, pointer channel ready, connected, reconnecting, failed.
+- “Connected” must mean the pointer transport is actually ready—not merely Bluetooth enabled, an IP discovered, TLS opened, or WebSocket opened.
+- Do not auto-connect to stale saved IPs without checking target identity.
+- Do not log secrets, pairing keys, or tokens.
+- Avoid breaking Windows while implementing TV protocols.
+- Check licenses before adapting third-party source; preserve required notices.
+- No cloud backend is required for the intended local Wi-Fi / local receiver architecture.
+
+## 8. Existing docs and code defects to verify
+
+Read `docs/Error.md` and `docs/REFERENCE.md` fully, but verify historical claims against current code. Specifically investigate:
+
+- false connected state after a failed connection;
+- ATRPv2 framing, pairing, certificate and readiness;
+- fake/decorative QR pairing;
+- TV platform protocols launched concurrently;
+- Samsung token authorization/persistence;
+- LG registration and pointer socket handling;
+- Roku target/platform mismatch;
+- Bluetooth HID target falsely reporting connected;
+- Windows receiver protocol and calibration;
+- stale callbacks after target switching;
+- misleading logs/status messages;
+- Air Mouse mode not correctly starting/stopping the sensor listener;
+- regressions introduced by prior fixes.
+
+Fix only confirmed defects, and add tests for each fix.
+
+## 9. Testing required
 
 ### Unit tests
-- Varint framing, split reads, malformed/oversized frame handling.
-- Protobuf message encoding/decoding and protocol payloads.
-- Android TV pairing-secret derivation, RSA unsigned byte conversion, certificate persistence.
-- Windows JSON schema and newline framing.
-- Sensor-to-pointer math, orientation, calibration, filtering, dead-zone and sensitivity.
-- Connection state machine transitions and failure paths.
-- LG pointer-frame serialization and response parsing.
-- TV target selection ensures only one protocol is active.
+- sensor/orientation mapping and axis direction;
+- calibration and recenter math;
+- filter/drift/dead-zone/sensitivity behavior;
+- fractional delta accumulation;
+- receiver JSON/framing;
+- serialized writes;
+- target routing;
+- pointer frame encoding and parsing for supported TV protocols;
+- connection/pointer-ready state transitions;
+- failure, timeout, disconnect and reconnect paths.
 
-### Integration / mock tests
-- Mock TCP server for Windows receiver: accepts discovery, TCP connection, newline JSON commands, malformed input and disconnect.
-- Mock TLS/protobuf server for Android TV pairing/control where practical.
-- Mock WebSocket registration and pointer socket for LG.
-- Test reconnect and timeout behavior, not just happy path.
+### Integration tests
+- Windows receiver mock: discovery, connection, valid/invalid packets, frame boundaries, disconnect and reconnect.
+- LG mock WebSocket: registration, pointer socket response, pointer ready/failure and reconnection.
+- Android TV companion/HID test only after a concrete architecture is selected.
+- Verify switching targets cannot send motion to an old target.
 
-### Real hardware acceptance
-Record exact TV/PC model, OS/firmware, network, app version, steps and outcome.
+### Live device testing
+Must record exact app commit, phone model/Android version, PC OS or TV brand/model/firmware, setup steps, and actual result.
 
-| Device target | Required test |
+| Target | Required live test |
 |---|---|
-| Windows PC | Air Mouse movement, calibration, click, scroll, keyboard, disconnect/reconnect |
-| Android TV / Google TV | Pairing, D-pad, Back/Home, volume, text, reconnect |
-| LG webOS | Pairing/registration, D-pad, pointer movement/click/scroll |
-| Samsung Tizen | Pairing/authorization, supported keys, reconnect |
-| Roku OS | ECP authorization and supported remote keys/text |
+| Windows PC | Actual cursor movement, calibration, drift, click/drag/scroll if supported |
+| LG webOS | Actual TV pointer movement and pointer actions |
+| Android TV/Google TV | Actual cursor movement using the selected companion/HID approach |
+| Samsung Tizen | Actual pointer movement only if a valid implementation exists |
+| Roku | Actual pointer movement only if a valid implementation exists |
 
-No hardware available? Mark the corresponding test **NOT TESTED**. Do not call it ready/live-tested.
+If hardware is unavailable, label it **NOT TESTED**. Do not say it works.
 
-## 6. CI and release requirements
+## 10. CI, APK and release
 
-1. Run the existing CI on the exact final commit SHA.
-2. Ensure unit tests run in CI, not just compilation.
-3. Inspect workflow logs for the exact run and commit; do not rely on an older green run.
-4. Build debug APK and install/test it before release.
-5. Release APK only after the core Windows path is verified and no known regression remains.
-6. APK artifact/release must point to the exact source commit and include clear testing status.
-7. Never say “all fixed”, “fully working”, or “ready for live testing” if real-device acceptance is incomplete. Report exactly which targets are tested, untested, unsupported, or partially working.
+- Run build and tests against the exact final commit SHA.
+- Inspect the current workflow result, not an older green run.
+- Build/install APK and test the Windows Air Mouse path before publishing.
+- Do not release an APK as “fixed” if the owner-reported Windows path remains broken.
+- A passing build is not proof of cursor behavior.
+- Report actual fixes, test output, device results, unsupported targets, and remaining blockers.
+- Do not claim “fully working” or “ready for live testing” without the required acceptance evidence.
 
-## 7. Definition of done
+## 11. Definition of done
 
-The project is **not done** until all are true:
-
-- [ ] Windows Air Mouse regression fixed and verified on real Windows hardware.
-- [ ] Calibration is understandable and reliable.
-- [ ] Android TV/Google TV pairing succeeds on real hardware.
-- [ ] Android TV key/text controls work on real hardware.
-- [ ] Android TV pointer capability is either implemented through a real supported mechanism or clearly unavailable (never faked).
-- [ ] LG pointer is verified on real webOS hardware before being advertised.
-- [ ] Samsung/Roku controls are separately verified and correctly platform-gated.
-- [ ] No false “connected” state or misleading feature labels remain.
+- [ ] Windows Air Mouse regression is fixed and tested on real Windows.
+- [ ] Calibration/recenter is reliable and understandable.
+- [ ] The real Windows cursor moves correctly from phone motion.
+- [ ] At least one TV platform has a real, live-tested cursor controlled by phone motion.
+- [ ] TV pointer transport is implemented correctly, not faked through remote key APIs.
+- [ ] Click/drag/scroll are tested before being advertised.
+- [ ] Unsupported TV brands are clearly marked unsupported for Air Mouse.
+- [ ] No false connection/pointer-ready claims.
 - [ ] Unit/integration tests pass.
-- [ ] CI passes for the exact final commit.
-- [ ] README and docs match actual verified behavior.
-- [ ] APK release is traceable to the tested commit.
+- [ ] CI passes on the exact commit.
+- [ ] Documentation and UI reflect actual verified capability.
+- [ ] APK corresponds to the tested commit.
 
-## 8. Final report the coding agent must provide
+## 12. Agent's final report
 
-At completion, report:
+Provide:
 
-1. Commit SHA(s) and changed file list.
-2. Root cause of each reproduced bug.
-3. Exact tests run and pass/fail output.
-4. Device/model/OS for each live test.
-5. Features fixed and features still unsupported/unverified.
-6. CI run URL and commit SHA.
-7. APK release URL only if actually built and uploaded.
-8. Remaining blockers and user actions required.
+1. Commit SHA and files changed.
+2. Root cause of Windows regression and TV pointer issue.
+3. Exact end-to-end pointer path implemented for Windows and each TV.
+4. Tests and outputs (not just “passed”).
+5. Real device models/OS/firmware and live-test results.
+6. Current support matrix: working / untested / unsupported.
+7. CI run URL and tested commit SHA.
+8. APK link only if actually built and tested.
+9. Remaining blockers and required owner actions.
 
-**Do not mark tasks complete based on source edits alone. Do not make up hardware test results.**
+**Do not report ordinary TV remote buttons as completion of the Air Mouse goal. Do not mark the project done based on source edits, local coordinates, socket writes, or CI alone.**
 
-## Useful protocol references
+## References to verify
 
-- Android TV Remote v2 reference implementation: https://github.com/tronikos/androidtvremote2
-- Current protocol write-up and real-device testing notes: https://github.com/sonalder-darlene/libremote-android-tv/blob/main/PROTOCOL.md
-- Air Remote's own research/known issues: `docs/REFERENCE.md` and `docs/Error.md`
+- Existing project research: `docs/REFERENCE.md`
+- Owner’s issue/repair history: `docs/Error.md`
+- Android TV Remote v2 reference: https://github.com/tronikos/androidtvremote2
+- LG webOS pointer reference listed in `docs/REFERENCE.md`
+- Motion/HID reference projects listed in `docs/REFERENCE.md`
 
-The reference implementations and third-party write-ups are technical evidence, not automatic permission to copy code. Verify licenses and preserve notices.
+Verify protocol details, current maintenance status, and licenses before reusing code.
