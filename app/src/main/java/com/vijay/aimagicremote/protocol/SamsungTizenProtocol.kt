@@ -1,5 +1,6 @@
 package com.vijay.aimagicremote.protocol
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.*
@@ -10,6 +11,13 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
+import java.net.URLEncoder
 
 /**
  * Samsung Tizen TV Protocol (v2 WebSocket Channel)
@@ -36,17 +44,56 @@ object SamsungTizenProtocol {
     var currentTvIp: String? = null
         private set
 
-    @Volatile
-    private var savedToken: String? = null
+    private var appContext: Context? = null
+    @Volatile private var expectedCertificateFingerprint: String? = null
+    @Volatile private var observedCertificateFingerprint: String? = null
 
     private var activeWebSocket: WebSocket? = null
+    private val tvTrustManager = object : X509TrustManager {
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+            val certificate = chain.firstOrNull() ?: throw CertificateException("Samsung TV sent no certificate")
+            val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+                .joinToString("") { "%02x".format(it) }
+            val pinned = expectedCertificateFingerprint
+            if (pinned != null && !pinned.equals(fingerprint, ignoreCase = true)) {
+                throw CertificateException("Samsung TV certificate changed. Forget the TV and pair it again.")
+            }
+            observedCertificateFingerprint = fingerprint
+        }
+    }
+    private val tvSslContext = SSLContext.getInstance("TLS").apply {
+        init(null, arrayOf(tvTrustManager), SecureRandom())
+    }
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(5, TimeUnit.SECONDS)
+        .sslSocketFactory(tvSslContext.socketFactory, tvTrustManager)
+        .hostnameVerifier { _, _ -> true } // Samsung TVs commonly use self-signed certs/IP hosts.
         .build()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /** Initialize once from the application context; tokens and cert pins are stored per TV IP. */
+    fun initialize(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    private fun prefs() = appContext?.getSharedPreferences("samsung_tv_auth", Context.MODE_PRIVATE)
+    private fun tokenKey(ip: String) = "token:$ip"
+    private fun certificateKey(ip: String) = "certificate:$ip"
+
+    private fun loadToken(ip: String): String? = prefs()?.getString(tokenKey(ip), null)
+    private fun saveToken(ip: String, token: String) {
+        prefs()?.edit()?.putString(tokenKey(ip), token)?.apply()
+    }
+    private fun saveCertificatePin(ip: String) {
+        observedCertificateFingerprint?.let { fingerprint ->
+            prefs()?.edit()?.putString(certificateKey(ip), fingerprint)?.apply()
+        }
+    }
 
     /**
      * Connect to Samsung Tizen TV over WebSocket
@@ -61,9 +108,12 @@ object SamsungTizenProtocol {
                 Log.i(TAG, "Connecting to Samsung Tizen TV WebSocket at $cleanIp:$WS_PORT...")
 
                 val appNameBase64 = Base64.encodeToString("Air Remote".toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                expectedCertificateFingerprint = prefs()?.getString(certificateKey(cleanIp), null)
+                observedCertificateFingerprint = null
+                val savedToken = loadToken(cleanIp)
                 var wsUrl = "ws://$cleanIp:$WS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
                 savedToken?.let { token ->
-                    wsUrl += "&token=$token"
+                    wsUrl += "&token=${URLEncoder.encode(token, "UTF-8")}"
                 }
 
                 val request = Request.Builder()
@@ -72,26 +122,15 @@ object SamsungTizenProtocol {
 
                 activeWebSocket = client.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        isConnected = true
-                        Log.i(TAG, "Successfully connected via WebSocket to Samsung Tizen TV at $cleanIp")
-                        scope.launch(Dispatchers.Main) {
-                            callback?.onConnected()
-                        }
+                        // WebSocket opening is only transport readiness. Wait for the TV's
+                        // ms.channel.connect event (and approval/token response) before enabling controls.
+                        isConnected = false
+                        Log.i(TAG, "Samsung WebSocket transport opened; waiting for TV authorization event.")
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
-                        Log.d(TAG, "Received message from Samsung TV: $text")
-                        try {
-                            val json = JSONObject(text)
-                            if (json.has("data")) {
-                                val data = json.optJSONObject("data")
-                                val token = data?.optString("token")
-                                if (!token.isNull_or_empty()) {
-                                    savedToken = token
-                                    Log.i(TAG, "Captured Samsung TV auth token: $token")
-                                }
-                            }
-                        } catch (_: Exception) {}
+                        Log.d(TAG, "Received Samsung TV event.")
+                        handleSamsungEvent(cleanIp, webSocket, text, callback)
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -123,33 +162,21 @@ object SamsungTizenProtocol {
 
     private fun tryWssFallback(ip: String, appNameBase64: String, callback: ConnectCallback?) {
         try {
+            val savedToken = loadToken(ip)
             var wssUrl = "wss://$ip:$WSS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
             savedToken?.let { token ->
-                wssUrl += "&token=$token"
+                wssUrl += "&token=${URLEncoder.encode(token, "UTF-8")}"
             }
             val request = Request.Builder().url(wssUrl).build()
 
             activeWebSocket = client.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    isConnected = true
-                    Log.i(TAG, "Connected via WSS to Samsung Tizen TV at $ip:$WSS_PORT")
-                    scope.launch(Dispatchers.Main) {
-                        callback?.onConnected()
-                    }
+                    isConnected = false
+                    Log.i(TAG, "Samsung WSS transport opened; waiting for TV authorization event.")
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    try {
-                        val json = JSONObject(text)
-                        if (json.has("data")) {
-                            val data = json.optJSONObject("data")
-                            val token = data?.optString("token")
-                            if (!token.isNull_or_empty()) {
-                                savedToken = token
-                                Log.i(TAG, "Captured Samsung TV WSS auth token: $token")
-                            }
-                        }
-                    } catch (_: Exception) {}
+                    handleSamsungEvent(ip, webSocket, text, callback)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -165,6 +192,34 @@ object SamsungTizenProtocol {
             scope.launch(Dispatchers.Main) {
                 callback?.onConnectionFailed("Samsung TV error: ${e.message}")
             }
+        }
+    }
+
+    private fun handleSamsungEvent(ip: String, webSocket: WebSocket, text: String, callback: ConnectCallback?) {
+        try {
+            val json = JSONObject(text)
+            val event = json.optString("event")
+            val data = json.optJSONObject("data")
+            val token = data?.optString("token")
+            if (!token.isNull_or_empty()) {
+                saveToken(ip, token)
+                Log.i(TAG, "Samsung TV authorization token saved for this device.")
+            }
+            when (event) {
+                "ms.channel.connect" -> {
+                    isConnected = true
+                    saveCertificatePin(ip)
+                    scope.launch(Dispatchers.Main) { callback?.onConnected() }
+                }
+                "ms.channel.unauthorized" -> {
+                    isConnected = false
+                    scope.launch(Dispatchers.Main) {
+                        callback?.onConnectionFailed("Samsung TV rejected authorization. Approve Air Remote on the TV and retry.")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not parse Samsung TV event: ${e.message}")
         }
     }
 
