@@ -30,6 +30,9 @@ class TvConnectionService : Service() {
         const val ACTION_CONNECT = "com.vijay.aimagicremote.CONNECT"
         const val ACTION_DISCONNECT = "com.vijay.aimagicremote.DISCONNECT"
         const val ACTION_SEND_KEY = "com.vijay.aimagicremote.SEND_KEY"
+        const val ACTION_KEEP_ALIVE = "com.vijay.aimagicremote.KEEP_ALIVE"
+        private const val PREFS_NAME = "tv_connection_service"
+        private const val PREF_TV_IP = "last_tv_ip"
         const val EXTRA_TV_IP = "tv_ip"
         const val EXTRA_KEY_CODE = "key_code"
         const val NOTIFICATION_ID = 1001
@@ -49,16 +52,34 @@ class TvConnectionService : Service() {
                     val ip = intent.getStringExtra(EXTRA_TV_IP)
                     ip?.let { connectToTv(it) }
                 }
+                ACTION_KEEP_ALIVE -> {
+                    val ip = intent.getStringExtra(EXTRA_TV_IP)
+                    if (!ip.isNullOrBlank()) {
+                        tvIp = ip
+                        isRunning = true
+                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putString(PREF_TV_IP, ip).apply()
+                        // The Activity owns the current protocol connection. This FGS
+                        // keeps the process alive without opening a second TLS socket.
+                        startForegroundService()
+                    }
+                }
                 ACTION_DISCONNECT -> {
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(PREF_TV_IP).apply()
                     disconnectFromTv()
+                    stopSelf()
                 }
                 ACTION_SEND_KEY -> {
                     val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, -1)
-                    if (keyCode != -1) {
-                        sendKey(keyCode)
-                    }
+                    if (keyCode != -1) sendKey(keyCode)
                 }
             }
+        } ?: run {
+            // START_STICKY may restart this service with a null intent after process
+            // reclamation. Restore the last TV session instead of silently idling.
+            val lastIp = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_TV_IP, null)
+            if (!lastIp.isNullOrBlank()) connectToTv(lastIp)
+            else stopSelf()
         }
         return START_STICKY
     }
