@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
         discoveryManager = app.getTvDiscovery()
 
         // Set up target selector click handlers
-        targetTvBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.ANDROID_TV) }
+        targetTvBtn?.setOnClickListener { showTvPlatformDialog() }
         targetPcBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.WINDOWS_PC) }
         targetBtBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID) }
 
@@ -291,6 +291,24 @@ class MainActivity : AppCompatActivity() {
         btnMute = findViewById(R.id.btn_mute)
     }
 
+    private fun showTvPlatformDialog() {
+        val choices = arrayOf("Android TV / Google TV", "Samsung Tizen TV", "LG webOS TV", "Roku TV")
+        val targets = arrayOf(
+            RemoteManager.TargetDeviceType.ANDROID_TV,
+            RemoteManager.TargetDeviceType.SAMSUNG_TIZEN,
+            RemoteManager.TargetDeviceType.LG_WEBOS,
+            RemoteManager.TargetDeviceType.ROKU_TCL
+        )
+        val selected = targets.indexOf(activeTarget).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Choose TV platform")
+            .setSingleChoiceItems(choices, selected) { dialog, which ->
+                setTargetDevice(targets[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
     private fun setTargetDevice(type: RemoteManager.TargetDeviceType) {
         activeTarget = type
         RemoteManager.setTargetType(type)
@@ -575,6 +593,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPairingCodeDialog() {
+        if (activeTarget != RemoteManager.TargetDeviceType.ANDROID_TV) {
+            Toast.makeText(this, "The six-digit pairing flow is only for Android TV / Google TV. Samsung and LG use their TV approval prompts; Roku ECP does not use this pairing dialog.", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val targetIp = connectedDeviceIp.ifEmpty {
             tvIpAddress?.text?.toString()?.trim()?.removePrefix("/") ?: ""
         }
