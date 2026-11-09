@@ -56,9 +56,9 @@ class TvDiscoveryManager(private val context: Context) {
         Log.i("TvDiscovery", "Starting mDNS & LAN UDP discovery for Android TVs and Windows PCs...")
 
         val serviceTypes = listOf(
-            Pair("_androidtvremote._tcp", DeviceType.ANDROID_TV),
-            Pair("_androidtvremote2._tcp", DeviceType.ANDROID_TV),
-            Pair("_airremote._tcp", DeviceType.WINDOWS_PC),
+            Pair("_androidtvremote._tcp.", DeviceType.ANDROID_TV),
+            Pair("_androidtvremote2._tcp.", DeviceType.ANDROID_TV),
+            Pair("_airremote._tcp.", DeviceType.WINDOWS_PC),
         )
 
         for ((type, devType) in serviceTypes) {
