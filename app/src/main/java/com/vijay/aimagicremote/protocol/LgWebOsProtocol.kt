@@ -291,9 +291,9 @@ object LgWebOsProtocol {
     }
 
     private fun disconnectInternal() {
-        try {
-            activeWebSocket?.close(1000, "User disconnected")
-        } catch (_: Exception) {}
+        try { pointerWebSocket?.close(1000, "User disconnected") } catch (_: Exception) {}
+        try { activeWebSocket?.close(1000, "User disconnected") } catch (_: Exception) {}
+        pointerWebSocket = null
         activeWebSocket = null
         isConnected = false
     }
