@@ -96,6 +96,8 @@ object Atrpv2Protocol {
     @Volatile private var handshakeIp: String? = null
     @Volatile private var pairingHandshake: Boolean = false
     private var readerJob: Job? = null
+    @Volatile private var imeCounter: Int = 0
+    @Volatile private var imeFieldCounter: Int = 0
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val pairingLock = Any()
     private val controlWriteLock = Any()
@@ -465,6 +467,11 @@ object Atrpv2Protocol {
                             if (message.any { it.number == 3 }) {
                                 Log.w(TAG, "Android TV rejected a remote command (RemoteError).")
                             }
+                            if (message.any { it.number == 21 }) {
+                                val batchStatus = message.nested(21)
+                                imeCounter = batchStatus.number(1)
+                                imeFieldCounter = batchStatus.number(2)
+                            }
                         }
                     } catch (e: Exception) {
                         if (isActive && controlSocket === socket) {
@@ -560,8 +567,8 @@ object Atrpv2Protocol {
                     AtvWire.bytes(2, selection)
                 )
                 val batch = AtvWire.message(
-                    AtvWire.int(1, 0),
-                    AtvWire.int(2, 0),
+                    AtvWire.int(1, imeCounter),
+                    AtvWire.int(2, imeFieldCounter),
                     AtvWire.bytes(3, edit)
                 )
                 synchronized(controlWriteLock) {
