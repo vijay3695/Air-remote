@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -30,8 +34,21 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Run unit tests and assemble debug APK
-        run: ./gradlew testDebugUnitTest assembleDebug
+      - name: Run unit tests and assemble debug APK (retry transient dependency failures)
+        shell: bash
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew --no-daemon testDebugUnitTest assembleDebug; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Gradle build failed after 3 attempts."
+              exit 1
+            fi
+            echo "Gradle build attempt $attempt failed; retrying after a short delay..."
+            sleep $((attempt * 20))
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
