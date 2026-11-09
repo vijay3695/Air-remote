@@ -390,6 +390,9 @@ object Atrpv2Protocol {
             try {
                 if (ip.isBlank()) throw IOException("Enter a TV IP address.")
                 Log.i(TAG, "Opening Android TV Remote v2 control channel to $ip:$CONTROL_PORT")
+                val socket = newTlsSocket(ip, CONTROL_PORT, timeoutMs = 10000)
+                controlSocket = socket
+
                 // Android TV Remote control uses direct RemoteMessage protobufs.
                 // Configure, SetActive, ping, and RemoteStart may arrive in varying order.
                 socket.soTimeout = 15000
