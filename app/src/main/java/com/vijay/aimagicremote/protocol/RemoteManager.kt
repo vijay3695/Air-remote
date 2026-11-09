@@ -160,14 +160,14 @@ object RemoteManager {
             }
 
             TargetDeviceType.BLUETOOTH_HID -> {
-                val btAvailable = bluetoothController?.isBluetoothAvailable() ?: false
-                if (btAvailable) {
-                    isConnected = true
-                    callback?.onConnected()
-                } else {
-                    isConnected = false
-                    callback?.onConnectionFailed("Bluetooth is disabled or not available on this device")
-                }
+                isConnected = false
+                callback?.onConnectionFailed(
+                    if (bluetoothController?.isBluetoothAvailable() == true) {
+                        "Bluetooth is enabled, but this build does not yet establish a Bluetooth HID connection to the TV. It cannot be marked connected until the TV accepts the phone as a mouse/keyboard."
+                    } else {
+                        "Bluetooth is disabled or not available on this device."
+                    }
+                )
             }
         }
     }
@@ -211,7 +211,7 @@ object RemoteManager {
                     PcRemoteProtocol.sendKey(pcKeyName)
                 }
                 TargetDeviceType.BLUETOOTH_HID -> {
-                    PcRemoteProtocol.sendKey(pcKeyName)
+                    Log.w(TAG, "Bluetooth HID command rejected: no HID session is connected.")
                 }
             }
         }
@@ -232,7 +232,7 @@ object RemoteManager {
                     PcRemoteProtocol.sendMouseMove(dx, dy)
                 }
                 TargetDeviceType.BLUETOOTH_HID -> {
-                    PcRemoteProtocol.sendMouseMove(dx, dy)
+                    Log.w(TAG, "Bluetooth HID pointer rejected: no HID session is connected.")
                 }
                 else -> {}
             }
@@ -263,8 +263,11 @@ object RemoteManager {
                     val keyName = if (isRightClick) "BACK" else "OK"
                     RokuTclProtocol.sendKey(keyName)
                 }
-                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
+                TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseClick(if (isRightClick) "right" else "left")
+                }
+                TargetDeviceType.BLUETOOTH_HID -> {
+                    Log.w(TAG, "Bluetooth HID click rejected: no HID session is connected.")
                 }
             }
         }
@@ -281,8 +284,11 @@ object RemoteManager {
                 TargetDeviceType.ANDROID_TV -> {
                     Atrpv2Protocol.injectScroll(dx, dy)
                 }
-                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
+                TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseScroll(dx, dy)
+                }
+                TargetDeviceType.BLUETOOTH_HID -> {
+                    Log.w(TAG, "Bluetooth HID scroll rejected: no HID session is connected.")
                 }
                 else -> {}
             }
@@ -302,8 +308,11 @@ object RemoteManager {
                         Atrpv2Protocol.sendKey(char.code)
                     }
                 }
-                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
+                TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendText(text)
+                }
+                TargetDeviceType.BLUETOOTH_HID -> {
+                    Log.w(TAG, "Bluetooth HID text rejected: no HID session is connected.")
                 }
                 else -> {}
             }
