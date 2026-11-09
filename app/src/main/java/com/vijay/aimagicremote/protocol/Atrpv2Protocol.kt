@@ -406,7 +406,7 @@ object Atrpv2Protocol {
                     val message = readRemoteMessage(socket)
                     when {
                         message.any { it.number == 1 } -> {
-                            features = message.nested(1).number(1) and (1 or 2 or 4 or 32 or 64 or 512)
+                            features = message.nested(1).number(1) and (1 or 2 or 4)
                             remoteFeatures = features
                             if (features and 2 == 0) {
                                 throw IOException("TV did not advertise key-control support.")
