@@ -72,7 +72,7 @@ For third-party Wi-Fi remote apps to control your TV, specific TV menu settings 
 2. On Windows, run PowerShell in an interactive desktop session from the repository folder:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\\pc_receiver.ps1
+   powershell -ExecutionPolicy Bypass -File .\pc_receiver.ps1
    ```
 
 3. Allow inbound **TCP 9090** and **UDP 9090** in Windows Firewall if Windows asks or discovery/connection fails.
