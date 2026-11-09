@@ -53,10 +53,10 @@ class ProtocolAndSensorUnitTest {
         assertEquals(23, Atrpv2Protocol.KEY_CODES.OK)
         assertEquals(4, Atrpv2Protocol.KEY_CODES.BACK)
         assertEquals(3, Atrpv2Protocol.KEY_CODES.HOME)
-        assertEquals(24, Atrpv2Protocol.KEY_CODES.POWER)
-        assertEquals(25, Atrpv2Protocol.KEY_CODES.VOLUME_UP)
-        assertEquals(26, Atrpv2Protocol.KEY_CODES.VOLUME_DOWN)
-        assertEquals(27, Atrpv2Protocol.KEY_CODES.MUTE)
+        assertEquals(26, Atrpv2Protocol.KEY_CODES.POWER)
+        assertEquals(24, Atrpv2Protocol.KEY_CODES.VOLUME_UP)
+        assertEquals(25, Atrpv2Protocol.KEY_CODES.VOLUME_DOWN)
+        assertEquals(164, Atrpv2Protocol.KEY_CODES.MUTE)
     }
 
     @Test
