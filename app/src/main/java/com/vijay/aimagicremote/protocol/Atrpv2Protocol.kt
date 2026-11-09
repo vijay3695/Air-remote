@@ -40,10 +40,10 @@ object Atrpv2Protocol {
         const val OK = 23
         const val BACK = 4
         const val HOME = 3
-        const val POWER = 24
-        const val VOLUME_UP = 25
-        const val VOLUME_DOWN = 26
-        const val MUTE = 27
+        const val POWER = 26
+        const val VOLUME_UP = 24
+        const val VOLUME_DOWN = 25
+        const val MUTE = 164
         const val INPUT = 28
         const val MENU = 82
         const val BACKSPACE = 67
