@@ -371,3 +371,16 @@ A platform is **working** only when all of the following are true:
 ---
 
 *Prepared after source inspection and protocol-reference research. No application source code or Gradle files were changed as part of this report.*
+## Repair update — UI, Windows receiver, and discovery follow-up
+
+Further source-level defects found during the follow-up review and committed to `main`:
+
+- **TV target selection:** the main TV button now opens a platform chooser for Android TV / Google TV, Samsung Tizen, LG webOS, and Roku. The pairing-code dialog is restricted to Android TV / Google TV, preventing the wrong pairing flow from being started on other brands.
+- **Target switching:** changing target type disconnects the previous protocol and clears the manager's connected state before a new target is used.
+- **Windows PC receiver:** mouse deltas now retain fractional movement across frames instead of rounding every sensor sample away; text escaping was corrected; the Home button now sends `HOME` rather than opening the Windows Start menu with the Windows key.
+- **Windows/LAN discovery:** Rescan now clears cached devices and restarts discovery. PC UDP discovery sends to the current Wi-Fi subnet broadcast when available, and generic `_workstation._tcp` services are no longer falsely labeled as Air Remote receivers.
+- **LG webOS pointer channel:** pointer commands are sent only after the pointer WebSocket's `onOpen` event. A constructed-but-not-connected socket is no longer treated as ready.
+- **Android TV pairing:** the pairing service identifier now matches the upstream `atvremote` convention. Android TV protobuf codec tests cover varint boundaries, message fields, frame round-trip, and oversized-frame rejection.
+- **CI:** Android build/unit tests and a Windows runner PowerShell parse check are configured. Recent earlier failures included a transient Kotlin Gradle plugin resolution failure; the Android job now retries the build up to three times. A retry does not mask a deterministic compile/test failure.
+
+**Do not mark the app fully working yet.** The current code is prepared for controlled live testing only after the latest CI run succeeds. TV brand pairing/commands, Windows Air Mouse movement and calibration, trackpad clicks/scroll, and text entry still require actual device acceptance tests. Stock Android TV Remote v2 does not provide general pointer injection, so Android TV gyro Air Mouse remains unsupported without a separate TV-side receiver/accessibility/HID approach. Bluetooth HID is still unavailable.
