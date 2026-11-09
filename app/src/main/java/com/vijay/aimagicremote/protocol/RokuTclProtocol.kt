@@ -88,7 +88,7 @@ object RokuTclProtocol {
         if (!isConnected || text.isEmpty()) return
         scope.launch {
             for (character in text) {
-                val encoded = java.net.URLEncoder.encode(character.toString(), "UTF-8")
+                val encoded = java.net.URLEncoder.encode(character.toString(), "UTF-8").replace("+", "%20")
                 val request = Request.Builder()
                     .url("http://$ip:$ECP_PORT/keypress/Lit_$encoded")
                     .post("".toRequestBody("text/plain".toMediaType()))
