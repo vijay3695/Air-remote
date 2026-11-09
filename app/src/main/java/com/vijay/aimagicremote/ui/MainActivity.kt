@@ -567,16 +567,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPairingCodeDialog() {
-        val targetIp = connectedDeviceIp.ifEmpty { tvIpAddress?.text?.toString()?.trim()?.removePrefix("/") ?: "192.168.1.4" }
-
-        Atrpv2Protocol.startPairing(targetIp) { success, msg ->
-            runOnUiThread {
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-            }
+        val targetIp = connectedDeviceIp.ifEmpty {
+            tvIpAddress?.text?.toString()?.trim()?.removePrefix("/") ?: ""
         }
 
+        if (targetIp.isBlank() || targetIp.startsWith("Enter")) {
+            Toast.makeText(this, "Enter the TV's IP address first.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        enableRemoteControls(false)
+        btnConnect?.isEnabled = false
+        txtStatus?.text = "Starting TV pairing with $targetIp…"
+
+        Atrpv2Protocol.startPairing(targetIp, object : Atrpv2Protocol.PairingCallback {
+            override fun onPairingStarted() {
+                runOnUiThread {
+                    txtStatus?.text = "Waiting for the TV to show its pairing code…"
+                }
+            }
+
+            override fun onPinRequired(pin: String) {
+                runOnUiThread {
+                    btnConnect?.isEnabled = true
+                    txtStatus?.text = "TV pairing code received. Enter the code shown on the TV."
+                    showPairingCodeEntryDialog(targetIp)
+                }
+            }
+
+            override fun onPairingSuccess() {
+                runOnUiThread {
+                    btnConnect?.isEnabled = true
+                    txtStatus?.text = "Pairing completed. Connecting to TV…"
+                    connectToDevice(targetIp)
+                }
+            }
+
+            override fun onPairingFailed(error: String) {
+                runOnUiThread {
+                    btnConnect?.isEnabled = true
+                    txtStatus?.text = "Pairing failed: $error"
+                    enableRemoteControls(false)
+                    Toast.makeText(this@MainActivity, error, Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+    }
+
+    private fun showPairingCodeEntryDialog(targetIp: String) {
         val input = EditText(this).apply {
-            hint = "Enter 6-character code shown on TV"
+            hint = "6-character code shown on TV"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
             filters = arrayOf(android.text.InputFilter.LengthFilter(6))
             setTextColor(Color.WHITE)
@@ -584,29 +624,38 @@ class MainActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Enter TV 6-Digit Pairing Code")
-            .setMessage("Air Remote sent a pairing request to TV ($targetIp).\nCheck your TV screen for the 6-digit code and enter it below:")
+            .setTitle("Enter TV Pairing Code")
+            .setMessage("Enter the six hexadecimal characters displayed on the TV.")
             .setView(input)
             .setPositiveButton("Verify & Connect") { dialog, _ ->
                 val code = input.text.toString().trim()
                 if (code.matches(Regex("[0-9A-Fa-f]{6}"))) {
+                    txtStatus?.text = "Verifying pairing code…"
+                    btnConnect?.isEnabled = false
                     Atrpv2Protocol.submitPairingCode(code) { success, msg ->
                         runOnUiThread {
+                            btnConnect?.isEnabled = true
                             if (success) {
+                                txtStatus?.text = "Pairing verified. Connecting to TV…"
                                 connectToDevice(targetIp)
                             } else {
-                                txtStatus?.text = "Pairing Failed: $msg"
+                                txtStatus?.text = "Pairing failed: $msg"
                                 enableRemoteControls(false)
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                             }
-                            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else {
-                    Toast.makeText(this, "Enter all 6 hexadecimal characters from the TV", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Enter all 6 hexadecimal characters from the TV.", Toast.LENGTH_SHORT).show()
                 }
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                Atrpv2Protocol.disconnect()
+                btnConnect?.isEnabled = true
+                txtStatus?.text = "Pairing cancelled."
+                dialog.dismiss()
+            }
             .show()
     }
 
