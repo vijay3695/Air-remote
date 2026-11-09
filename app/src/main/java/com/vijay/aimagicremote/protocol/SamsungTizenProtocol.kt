@@ -201,8 +201,8 @@ object SamsungTizenProtocol {
             val event = json.optString("event")
             val data = json.optJSONObject("data")
             val token = data?.optString("token")
-            if (!token.isNull_or_empty()) {
-                saveToken(ip, token)
+            token?.takeIf { it.isNotEmpty() && it != "null" }?.let {
+                saveToken(ip, it)
                 Log.i(TAG, "Samsung TV authorization token saved for this device.")
             }
             when (event) {
