@@ -381,7 +381,11 @@ object Atrpv2Protocol {
                         message.any { it.number == 40 } -> ready = true // RemoteStart
                         message.any { it.number == 8 } -> {
                             val pingId = message.nested(8).number(1)
-                            sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                            synchronized(controlWriteLock) {
+                                if (controlSocket === socket && !socket.isClosed) {
+                                    sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                                }
+                            }
                         }
                         message.any { it.number == 3 } -> throw IOException("TV rejected the remote session.")
                     }
@@ -399,7 +403,11 @@ object Atrpv2Protocol {
                             val message = readEnvelope(socket)
                             if (message.any { it.number == 8 }) {
                                 val pingId = message.nested(8).number(1)
-                                sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                                synchronized(controlWriteLock) {
+                                    if (controlSocket === socket && !socket.isClosed) {
+                                        sendEnvelope(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
+                                    }
+                                }
                             }
                         }
                     } catch (e: Exception) {
