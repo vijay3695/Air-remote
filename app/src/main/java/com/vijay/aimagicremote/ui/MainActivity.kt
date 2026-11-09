@@ -840,6 +840,7 @@ class MainActivity : AppCompatActivity() {
         RemoteManager.disconnect()
         stopTvConnectionKeepAlive()
         isConnected = false
+        btnConnect?.isEnabled = true
         btnConnect?.text = "Connect"
         txtStatus?.text = "Disconnected"
         enableRemoteControls(false)
