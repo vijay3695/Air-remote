@@ -108,6 +108,7 @@ object RemoteManager {
             }
 
             TargetDeviceType.LG_WEBOS -> {
+                LgWebOsProtocol.initialize(context)
                 LgWebOsProtocol.connect(cleanIp, object : LgWebOsProtocol.ConnectCallback {
                     override fun onConnected() {
                         isConnected = true
