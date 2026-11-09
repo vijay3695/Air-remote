@@ -2,16 +2,16 @@ package com.vijay.aimagicremote
 
 import com.vijay.aimagicremote.bluetooth.OneEuroFilter
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
+import com.vijay.aimagicremote.protocol.LgWebOsProtocol
 import com.vijay.aimagicremote.protocol.PcRemoteProtocol
 import com.vijay.aimagicremote.protocol.RemoteManager
-import com.vijay.aimagicremote.protocol.adapters.LwProtocolAdapter
-import com.vijay.aimagicremote.protocol.adapters.SamsungProtocolAdapter
-import com.vijay.aimagicremote.protocol.adapters.TvPlatformDetector
+import com.vijay.aimagicremote.protocol.RokuTclProtocol
+import com.vijay.aimagicremote.protocol.SamsungTizenProtocol
 import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Unit tests for Air Remote Protocols (ATRPv2, PC Remote, RemoteManager), 1€ Filter, and Adapters
+ * Unit tests for Air Remote Multi-Brand Protocols, 1€ Filter, and Target Routing
  */
 class ProtocolAndSensorUnitTest {
 
@@ -45,7 +45,7 @@ class ProtocolAndSensorUnitTest {
     }
 
     @Test
-    fun testKeyCodesMapping() {
+    fun testAtrpv2KeyCodesMapping() {
         assertEquals(19, Atrpv2Protocol.KEY_CODES.UP)
         assertEquals(20, Atrpv2Protocol.KEY_CODES.DOWN)
         assertEquals(21, Atrpv2Protocol.KEY_CODES.LEFT)
@@ -60,21 +60,12 @@ class ProtocolAndSensorUnitTest {
     }
 
     @Test
-    fun testTvPlatformDetectionAndAdaptation() {
-        val webosResponse = "LG webOS TV v6.0"
-        assertEquals("webos", TvPlatformDetector.detectPlatform(webosResponse))
-
-        val tizenResponse = "Samsung Tizen TV v5.5"
-        assertEquals("tizen", TvPlatformDetector.detectPlatform(tizenResponse))
-
-        val androidTvResponse = "Android TV / Google TV v12"
-        assertEquals("android_tv", TvPlatformDetector.detectPlatform(androidTvResponse))
-
-        val lgPowerCode = LwProtocolAdapter.adaptKeyCode(Atrpv2Protocol.KEY_CODES.POWER)
-        assertEquals(100, lgPowerCode)
-
-        val samsungPowerCode = SamsungProtocolAdapter.adaptKeyCode(Atrpv2Protocol.KEY_CODES.POWER)
-        assertEquals(300, samsungPowerCode)
+    fun testMultiBrandProtocolPorts() {
+        assertEquals(8060, RokuTclProtocol.ECP_PORT)
+        assertEquals(8001, SamsungTizenProtocol.WS_PORT)
+        assertEquals(8002, SamsungTizenProtocol.WSS_PORT)
+        assertEquals(3000, LgWebOsProtocol.WS_PORT)
+        assertEquals(3001, LgWebOsProtocol.WSS_PORT)
     }
 
     @Test

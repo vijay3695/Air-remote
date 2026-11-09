@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Samsung Tizen TV Protocol (v2 WebSocket Channel)
  * Controls Samsung Tizen Smart TVs over local Wi-Fi on port 8001 (ws://) or 8002 (wss://).
- * Sends JSON key control payloads: {"method":"ms.remote.control","params":{"Cmd":"Click","DataOfCmd":"KEY_POWER","Option":"false","TypeOfRemote":"SendRemoteKey"}}
+ * Persists and reuses authorization token returned on first connection.
  */
 object SamsungTizenProtocol {
 
@@ -35,6 +35,9 @@ object SamsungTizenProtocol {
     @Volatile
     var currentTvIp: String? = null
         private set
+
+    @Volatile
+    private var savedToken: String? = null
 
     private var activeWebSocket: WebSocket? = null
     private val client = OkHttpClient.Builder()
@@ -58,7 +61,10 @@ object SamsungTizenProtocol {
                 Log.i(TAG, "Connecting to Samsung Tizen TV WebSocket at $cleanIp:$WS_PORT...")
 
                 val appNameBase64 = Base64.encodeToString("Air Remote".toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-                val wsUrl = "ws://$cleanIp:$WS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
+                var wsUrl = "ws://$cleanIp:$WS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
+                savedToken?.let { token ->
+                    wsUrl += "&token=$token"
+                }
 
                 val request = Request.Builder()
                     .url(wsUrl)
@@ -73,9 +79,23 @@ object SamsungTizenProtocol {
                         }
                     }
 
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        Log.d(TAG, "Received message from Samsung TV: $text")
+                        try {
+                            val json = JSONObject(text)
+                            if (json.has("data")) {
+                                val data = json.optJSONObject("data")
+                                val token = data?.optString("token")
+                                if (!token.isNull_or_empty()) {
+                                    savedToken = token
+                                    Log.i(TAG, "Captured Samsung TV auth token: $token")
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         Log.w(TAG, "Samsung WebSocket connection failed: ${t.message}, trying WSS port 8002...")
-                        // Fallback to WSS
                         tryWssFallback(cleanIp, appNameBase64, callback)
                     }
 
@@ -103,7 +123,10 @@ object SamsungTizenProtocol {
 
     private fun tryWssFallback(ip: String, appNameBase64: String, callback: ConnectCallback?) {
         try {
-            val wssUrl = "wss://$ip:$WSS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
+            var wssUrl = "wss://$ip:$WSS_PORT/api/v2/channels/samsung.remote.control?name=$appNameBase64"
+            savedToken?.let { token ->
+                wssUrl += "&token=$token"
+            }
             val request = Request.Builder().url(wssUrl).build()
 
             activeWebSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -113,6 +136,20 @@ object SamsungTizenProtocol {
                     scope.launch(Dispatchers.Main) {
                         callback?.onConnected()
                     }
+                }
+
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    try {
+                        val json = JSONObject(text)
+                        if (json.has("data")) {
+                            val data = json.optJSONObject("data")
+                            val token = data?.optString("token")
+                            if (!token.isNull_or_empty()) {
+                                savedToken = token
+                                Log.i(TAG, "Captured Samsung TV WSS auth token: $token")
+                            }
+                        }
+                    } catch (_: Exception) {}
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -129,6 +166,10 @@ object SamsungTizenProtocol {
                 callback?.onConnectionFailed("Samsung TV error: ${e.message}")
             }
         }
+    }
+
+    private fun String?.isNull_or_empty(): Boolean {
+        return this == null || this.isEmpty() || this == "null"
     }
 
     fun disconnect() {
@@ -182,17 +223,6 @@ object SamsungTizenProtocol {
         if (ws != null) {
             ws.send(payload)
             Log.d(TAG, "Sent Samsung Tizen key payload: $payload")
-        } else {
-            // Fallback HTTP POST / socket trigger if WebSocket was briefly closed
-            currentTvIp?.let { ip ->
-                scope.launch {
-                    try {
-                        val url = "http://$ip:$WS_PORT/api/v2/"
-                        val request = Request.Builder().url(url).get().build()
-                        client.newCall(request).execute().close()
-                    } catch (_: Exception) {}
-                }
-            }
         }
     }
 }

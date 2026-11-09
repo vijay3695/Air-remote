@@ -7,13 +7,14 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
  * LG webOS TV Protocol (SSAP WebSocket)
  * Controls LG Smart TVs over local Wi-Fi on port 3000 (ws://) or 3001 (wss://).
- * Sends SSAP command payloads: {"id":"turnOff","type":"request","uri":"ssap://system/turnOff"}
+ * Sends SSAP registration payload with client-key persistence and handles TV approval responses.
  */
 object LgWebOsProtocol {
 
@@ -34,6 +35,9 @@ object LgWebOsProtocol {
     @Volatile
     var currentTvIp: String? = null
         private set
+
+    @Volatile
+    private var savedClientKey: String? = null
 
     private var activeWebSocket: WebSocket? = null
     private val client = OkHttpClient.Builder()
@@ -58,14 +62,34 @@ object LgWebOsProtocol {
 
                 activeWebSocket = client.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        isConnected = true
-                        Log.i(TAG, "Connected via WebSocket to LG webOS TV at $cleanIp")
-                        scope.launch(Dispatchers.Main) {
-                            callback?.onConnected()
-                        }
+                        Log.i(TAG, "WebSocket open to LG webOS TV at $cleanIp. Sending SSAP registration payload...")
+                        sendRegistrationPayload(webSocket)
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        Log.d(TAG, "Received message from LG webOS TV: $text")
+                        try {
+                            val json = JSONObject(text)
+                            val type = json.optString("type")
+                            if (type == "registered") {
+                                val payload = json.optJSONObject("payload")
+                                val clientKey = payload?.optString("client-key")
+                                if (!clientKey.isNullOrEmpty()) {
+                                    savedClientKey = clientKey
+                                    Log.i(TAG, "Captured LG webOS client-key: $clientKey")
+                                }
+                                isConnected = true
+                                scope.launch(Dispatchers.Main) {
+                                    callback?.onConnected()
+                                }
+                            } else if (type == "response" || json.has("payload")) {
+                                isConnected = true
+                            }
+                        } catch (_: Exception) {}
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        isConnected = false
                         Log.w(TAG, "LG WebSocket connection failed: ${t.message}")
                         scope.launch(Dispatchers.Main) {
                             callback?.onConnectionFailed("Could not connect to LG webOS TV at $cleanIp")
@@ -94,6 +118,33 @@ object LgWebOsProtocol {
         }
     }
 
+    private fun sendRegistrationPayload(webSocket: WebSocket) {
+        val registerJson = JSONObject().apply {
+            put("type", "register")
+            put("id", "register_0")
+            put("payload", JSONObject().apply {
+                put("forcePairing", false)
+                put("pairingType", "PROMPT")
+                savedClientKey?.let { key ->
+                    put("client-key", key)
+                }
+                put("manifest", JSONObject().apply {
+                    put("manifestVersion", 1)
+                    put("permissions", JSONArray().apply {
+                        put("LAUNCH")
+                        put("CONTROL_AUDIO")
+                        put("CONTROL_POWER")
+                        put("READ_INSTALLED_APPS")
+                        put("CONTROL_INPUT_TEXT")
+                        put("CONTROL_MOUSE_AND_KEYBOARD")
+                    })
+                })
+            })
+        }
+        webSocket.send(registerJson.toString())
+        Log.i(TAG, "Sent SSAP registration payload to LG webOS TV")
+    }
+
     fun disconnect() {
         scope.launch {
             disconnectInternal()
@@ -116,6 +167,11 @@ object LgWebOsProtocol {
             "VOL_DOWN", "VOLUME_DOWN" -> "ssap://audio/volumeDown"
             "MUTE" -> "ssap://audio/setMute"
             "INPUT", "SOURCE" -> "ssap://tv/switchInput"
+            "UP" -> "ssap://tv/sendButton"
+            "DOWN" -> "ssap://tv/sendButton"
+            "LEFT" -> "ssap://tv/sendButton"
+            "RIGHT" -> "ssap://tv/sendButton"
+            "OK", "ENTER" -> "ssap://tv/sendButton"
             else -> "ssap://media.controls/play"
         }
 
@@ -123,10 +179,15 @@ object LgWebOsProtocol {
             put("id", System.currentTimeMillis().toString())
             put("type", "request")
             put("uri", uri)
+            if (uri.endsWith("sendButton")) {
+                put("payload", JSONObject().apply {
+                    put("name", keyName.uppercase())
+                })
+            }
         }
 
         val ws = activeWebSocket
-        if (ws != null) {
+        if (ws != null && isConnected) {
             ws.send(json.toString())
             Log.d(TAG, "Sent LG webOS SSAP command: ${json.toString()}")
         }

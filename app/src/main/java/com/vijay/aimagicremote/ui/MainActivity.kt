@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -194,15 +193,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick action buttons
-        btnQrCode?.setOnClickListener { showQrCodeDialog() }
+        btnQrCode?.setOnClickListener { showQrInfoDialog() }
         btnPairingCode?.setOnClickListener { showPairingCodeDialog() }
         btnKeyboardText?.setOnClickListener { showKeyboardTextInputDialog() }
         btnRescan?.setOnClickListener { startWifiDeviceDiscovery() }
 
         // Recalibrate Gyro Button
         btnRecalibrate?.setOnClickListener {
-            bluetoothController?.calibrateGyro()
-            Toast.makeText(this, "Gyroscope calibrated! Hold phone steady.", Toast.LENGTH_SHORT).show()
+            showRecalibrateDialog()
         }
 
         // Mode Tab Handlers
@@ -225,8 +223,8 @@ class MainActivity : AppCompatActivity() {
             tvIpAddress?.setText(lastSavedIp)
         }
 
-        // Keep all buttons ALWAYS enabled
-        enableRemoteControls(true)
+        // Initial controls state
+        enableRemoteControls(false)
 
         // Automatically start Wi-Fi device discovery on launch
         startWifiDeviceDiscovery()
@@ -298,8 +296,9 @@ class MainActivity : AppCompatActivity() {
             RemoteManager.TargetDeviceType.ANDROID_TV -> "Android TV"
             RemoteManager.TargetDeviceType.WINDOWS_PC -> "Windows PC"
             RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID"
+            else -> "TV"
         }
-        txtStatus?.text = "Target Mode: $targetName. Ready to control."
+        txtStatus?.text = "Target Mode: $targetName. Click Connect or select a discovered device."
     }
 
     private fun switchMode(mode: String) {
@@ -341,27 +340,22 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupAirMouseAndTrackpad() {
         viewAirMouseTarget?.setOnClickListener {
-            ensureConnectedBeforeAction()
             RemoteManager.sendClick(isRightClick = false)
         }
 
         btnAirLeftClick?.setOnClickListener {
-            ensureConnectedBeforeAction()
             RemoteManager.sendClick(isRightClick = false)
         }
 
         btnAirRightClick?.setOnClickListener {
-            ensureConnectedBeforeAction()
             RemoteManager.sendClick(isRightClick = true)
         }
 
         btnTrackLeftClick?.setOnClickListener {
-            ensureConnectedBeforeAction()
             RemoteManager.sendClick(isRightClick = false)
         }
 
         btnTrackRightClick?.setOnClickListener {
-            ensureConnectedBeforeAction()
             RemoteManager.sendClick(isRightClick = true)
         }
 
@@ -401,8 +395,6 @@ class MainActivity : AppCompatActivity() {
                     val dx = event.x - lastTouchX
                     val dy = event.y - lastTouchY
 
-                    ensureConnectedBeforeAction()
-
                     if (pointerCount == 1) {
                         if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
                             trackpadPosX = (trackpadPosX + dx * 1.5f).coerceIn(-400f, 400f)
@@ -425,7 +417,6 @@ class MainActivity : AppCompatActivity() {
                     val distMoved = abs(event.x - initialTouchX) + abs(event.y - initialTouchY)
 
                     if (duration < 250 && distMoved < 15) {
-                        ensureConnectedBeforeAction()
                         RemoteManager.sendClick(isRightClick = false)
                     }
                 }
@@ -434,7 +425,6 @@ class MainActivity : AppCompatActivity() {
                     if (pointerCount == 2) {
                         val duration = System.currentTimeMillis() - touchDownTime
                         if (duration < 300) {
-                            ensureConnectedBeforeAction()
                             RemoteManager.sendClick(isRightClick = true)
                         }
                     }
@@ -476,16 +466,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     txtStatus?.text = "Found ${deviceList.size} device(s) on local Wi-Fi:"
                     updateDiscoveredDeviceList(deviceList)
-                }
-            }
-        }
-
-        val lastSavedIp = prefs.getString("last_device_ip", "")?.removePrefix("/") ?: ""
-        if (lastSavedIp.isNotEmpty() && !isConnected) {
-            lifecycleScope.launch {
-                delay(1000)
-                if (!isConnected) {
-                    connectToDevice(lastSavedIp)
                 }
             }
         }
@@ -553,73 +533,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showQrCodeDialog() {
-        val currentIp = connectedDeviceIp.ifEmpty { "192.168.1.4" }
-        val pairingPayload = "air_remote://pair?target=$currentIp&protocol=atrpv2"
-
-        val qrBitmap = generateQrCodeBitmap(pairingPayload)
-
-        val dialogView = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-            gravity = android.view.Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#1C202B"))
-
-            val title = TextView(context).apply {
-                text = "Air Remote QR Code Pair"
-                setTextColor(Color.WHITE)
-                textSize = 18f
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                gravity = android.view.Gravity.CENTER
-            }
-
-            val qrImage = ImageView(context).apply {
-                setImageBitmap(qrBitmap)
-                layoutParams = LinearLayout.LayoutParams(450, 450).apply {
-                    setMargins(0, 16, 0, 16)
-                }
-            }
-
-            val info = TextView(context).apply {
-                text = "Scan this QR code from your TV screen to pair automatically."
-                setTextColor(Color.parseColor("#A0A5B5"))
-                textSize = 13f
-                gravity = android.view.Gravity.CENTER
-            }
-
-            addView(title)
-            addView(qrImage)
-            addView(info)
-        }
-
+    private fun showQrInfoDialog() {
         AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setPositiveButton("Done") { dialog, _ -> dialog.dismiss() }
+            .setTitle("QR Pairing Information")
+            .setMessage("Direct TV QR Code scanning requires the Air Remote Companion receiver app on TV OS.\n\nFor stock Google TV & Android TV, tap 'TV Code' to pair using the official 6-digit TV PIN.")
+            .setPositiveButton("Use TV Code") { dialog, _ ->
+                dialog.dismiss()
+                showPairingCodeDialog()
+            }
+            .setNegativeButton("Close") { dialog, _ -> dialog.dismiss() }
             .show()
     }
 
-    private fun generateQrCodeBitmap(content: String): Bitmap {
-        val size = 512
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        for (x in 0 until size) {
-            for (y in 0 until size) {
-                val isBorder = x < 20 || x > size - 20 || y < 20 || y > size - 20
-                val isFinderSquare1 = (x in 40..140 && y in 40..140)
-                val isFinderSquare2 = (x in size - 140..size - 40 && y in 40..140)
-                val isFinderSquare3 = (x in 40..140 && y in size - 140..size - 40)
-                val isPattern = (x / 16 + y / 16) % 2 == 0
-
-                val isBlack = isFinderSquare1 || isFinderSquare2 || isFinderSquare3 || (isPattern && !isBorder)
-                bitmap.setPixel(x, y, if (isBlack) Color.BLACK else Color.WHITE)
+    private fun showRecalibrateDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Air Mouse 2-Second Calibration Wizard")
+            .setMessage("Place your phone flat on a table or hold it completely still in your neutral hand position, then tap 'Start Sampling' below.\n\nThe app will collect gyro bias samples for 2 seconds to zero out drift.")
+            .setPositiveButton("Start Sampling") { dialog, _ ->
+                txtStatus?.text = "Calibrating Gyroscope... Hold phone still for 2 seconds."
+                Toast.makeText(this, "Hold phone completely still...", Toast.LENGTH_SHORT).show()
+                bluetoothController?.startNeutralPoseCalibration { success, msg ->
+                    txtStatus?.text = msg
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                }
+                dialog.dismiss()
             }
-        }
-        return bitmap
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun showPairingCodeDialog() {
         val targetIp = connectedDeviceIp.ifEmpty { tvIpAddress?.text?.toString()?.trim()?.removePrefix("/") ?: "192.168.1.4" }
 
-        Atrpv2Protocol.startPairing(targetIp) { _, msg ->
+        Atrpv2Protocol.startPairing(targetIp) { success, msg ->
             runOnUiThread {
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
@@ -639,12 +585,17 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Verify & Connect") { dialog, _ ->
                 val code = input.text.toString().trim()
                 if (code.length == 6) {
-                    Atrpv2Protocol.submitPairingCode(code) { _, msg ->
+                    Atrpv2Protocol.submitPairingCode(code) { success, msg ->
                         runOnUiThread {
+                            if (success) {
+                                connectToDevice(targetIp)
+                            } else {
+                                txtStatus?.text = "Pairing Failed: $msg"
+                                enableRemoteControls(false)
+                            }
                             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
-                    connectToDevice(targetIp)
                 } else {
                     Toast.makeText(this, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
                 }
@@ -668,7 +619,6 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Send") { dialog, _ ->
                 val text = input.text.toString()
                 if (text.isNotEmpty()) {
-                    ensureConnectedBeforeAction()
                     RemoteManager.sendText(text)
                     Toast.makeText(this, "Sent text: '$text'", Toast.LENGTH_SHORT).show()
                 }
@@ -693,15 +643,6 @@ class MainActivity : AppCompatActivity() {
         btnMute?.setOnClickListener { onBtnMuteClick() }
     }
 
-    private fun ensureConnectedBeforeAction() {
-        if (!RemoteManager.isConnected) {
-            val ip = connectedDeviceIp.ifEmpty { tvIpAddress?.text?.toString()?.trim()?.removePrefix("/") ?: "192.168.1.4" }
-            if (ip.isNotEmpty() && !ip.startsWith("Enter")) {
-                connectToDevice(ip)
-            }
-        }
-    }
-
     private fun connectToDevice(ip: String) {
         val cleanIp = ip.removePrefix("/")
         connectedDeviceIp = cleanIp
@@ -724,6 +665,7 @@ class MainActivity : AppCompatActivity() {
                             RemoteManager.TargetDeviceType.ANDROID_TV -> "Android TV"
                             RemoteManager.TargetDeviceType.WINDOWS_PC -> "Windows PC"
                             RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID"
+                            else -> "TV"
                         }
                         txtStatus?.text = "Connected to $deviceTypeStr ($cleanIp)"
                         prefs.edit().putString("last_device_ip", cleanIp).apply()
@@ -736,8 +678,9 @@ class MainActivity : AppCompatActivity() {
                         isConnected = false
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
-                        txtStatus?.text = "Connection Status: Ready ($cleanIp)"
-                        enableRemoteControls(true)
+                        txtStatus?.text = "Connection Failed: $error"
+                        Toast.makeText(this@MainActivity, "Connection Failed: $error", Toast.LENGTH_LONG).show()
+                        enableRemoteControls(false)
                     }
                 }
 
@@ -747,7 +690,7 @@ class MainActivity : AppCompatActivity() {
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
                         txtStatus?.text = "Disconnected from device"
-                        enableRemoteControls(true)
+                        enableRemoteControls(false)
                     }
                 }
             }
@@ -759,7 +702,7 @@ class MainActivity : AppCompatActivity() {
         isConnected = false
         btnConnect?.text = "Connect"
         txtStatus?.text = "Disconnected"
-        enableRemoteControls(true)
+        enableRemoteControls(false)
     }
 
     private fun enableRemoteControls(enabled: Boolean) {
@@ -767,63 +710,52 @@ class MainActivity : AppCompatActivity() {
             btnUp, btnDown, btnLeft, btnRight, btnOk, btnCenterOk,
             btnBack, btnHome, btnPower, btnVolumeUp, btnVolumeDown, btnMute
         )
-        buttons.forEach { it?.isEnabled = true }
+        buttons.forEach { it?.isEnabled = enabled }
     }
 
     // --- Remote Control Button Handlers ---
 
     fun onBtnUpClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.UP, "UP")
     }
 
     fun onBtnDownClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.DOWN, "DOWN")
     }
 
     fun onBtnLeftClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.LEFT, "LEFT")
     }
 
     fun onBtnRightClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.RIGHT, "RIGHT")
     }
 
     fun onBtnOkClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER")
     }
 
     fun onBtnBackClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.BACK, "ESCAPE")
     }
 
     fun onBtnHomeClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.HOME, "WIN")
     }
 
     fun onBtnPowerClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.POWER, "POWER")
     }
 
     fun onBtnVolumeUpClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_UP, "VOL_UP")
     }
 
     fun onBtnVolumeDownClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_DOWN, "VOL_DOWN")
     }
 
     fun onBtnMuteClick() {
-        ensureConnectedBeforeAction()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.MUTE, "MUTE")
     }
 

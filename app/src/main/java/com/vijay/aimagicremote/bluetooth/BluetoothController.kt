@@ -8,13 +8,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.util.Log
-import com.vijay.aimagicremote.protocol.Atrpv2Protocol
-import com.vijay.aimagicremote.protocol.PcRemoteProtocol
-import com.vijay.aimagicremote.protocol.RemoteManager
 import kotlinx.coroutines.*
 import kotlin.math.abs
-import kotlin.math.pow
-import kotlin.math.sign
 import kotlin.math.sqrt
 
 /**
@@ -66,8 +61,8 @@ class OneEuroFilter(
 /**
  * Smart 3D Gravity-Compensated Air Mouse with Continuous Dynamic Auto-Calibration
  * Features:
- * - Real-Time Dynamic Self-Calibration (Zero Drift when still)
- * - Rotation Vector + Gyroscope 3D Sensor Fusion (LG Magic Remote math)
+ * - 2-Second Neutral Pose Calibration Wizard with Stability Validation
+ * - Rotation Vector + Gyroscope 3D Sensor Fusion
  * - Adaptive Motion Deadzone Gate & Delta Clamping
  */
 class BluetoothController(private val context: Context) : SensorEventListener {
@@ -103,6 +98,13 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     // Stillness Detection EMA
     private var stillnessEma: Float = 0f
 
+    // Calibration Wizard Buffers
+    @Volatile
+    private var isCalibratingWizard: Boolean = false
+    private val calibrationSamplesX = mutableListOf<Float>()
+    private val calibrationSamplesY = mutableListOf<Float>()
+    private val calibrationSamplesZ = mutableListOf<Float>()
+
     private val controllerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     var pointerUpdateListener: ((dx: Float, dy: Float) -> Unit)? = null
@@ -111,9 +113,14 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         Log.d("BluetoothController", "Air Mouse Controller initialized - Gyro: ${gyroscopeSensor != null}, RotationVector: ${rotationVectorSensor != null}")
     }
 
-    /**
-     * Instantly Recenter / Reset Calibration
-     */
+    fun isBluetoothAvailable(): Boolean {
+        return bluetoothAdapter?.isEnabled == true
+    }
+
+    fun setSensitivity(sens: Float) {
+        pointerSensitivity = sens.coerceIn(0.2f, 4.0f)
+    }
+
     fun calibrateGyro() {
         gyroBiasX = 0f
         gyroBiasY = 0f
@@ -124,6 +131,73 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         Log.i("BluetoothController", "Gyroscope center reset")
     }
 
+    /**
+     * 2-Second Neutral Pose Calibration Wizard
+     */
+    fun startNeutralPoseCalibration(onResult: (Boolean, String) -> Unit) {
+        if (gyroscopeSensor == null) {
+            onResult(false, "Gyroscope sensor not available on this phone.")
+            return
+        }
+
+        controllerScope.launch {
+            calibrationSamplesX.clear()
+            calibrationSamplesY.clear()
+            calibrationSamplesZ.clear()
+            isCalibratingWizard = true
+
+            val wasActive = isAirMouseActive
+            if (!wasActive) {
+                sensorManager?.registerListener(
+                    this@BluetoothController,
+                    gyroscopeSensor,
+                    SensorManager.SENSOR_DELAY_GAME
+                )
+            }
+
+            delay(2000) // 2-second calibration sampling window
+
+            isCalibratingWizard = false
+            if (!wasActive) {
+                sensorManager?.unregisterListener(this@BluetoothController)
+            }
+
+            if (calibrationSamplesX.size > 20) {
+                val meanX = calibrationSamplesX.average().toFloat()
+                val meanY = calibrationSamplesY.average().toFloat()
+                val meanZ = calibrationSamplesZ.average().toFloat()
+
+                // Calculate variance to check if phone was held steady
+                val varianceX = calibrationSamplesX.map { (it - meanX) * (it - meanX) }.average().toFloat()
+                val varianceY = calibrationSamplesY.map { (it - meanY) * (it - meanY) }.average().toFloat()
+                val varianceZ = calibrationSamplesZ.map { (it - meanZ) * (it - meanZ) }.average().toFloat()
+                val totalVariance = sqrt(varianceX + varianceY + varianceZ)
+
+                if (totalVariance < 0.15f) {
+                    gyroBiasX = meanX
+                    gyroBiasY = meanY
+                    gyroBiasZ = meanZ
+                    filterX.reset()
+                    filterY.reset()
+
+                    Log.i("BluetoothController", "Calibration successful! Variance: $totalVariance, Biases: X=$meanX, Y=$meanY, Z=$meanZ")
+                    withContext(Dispatchers.Main) {
+                        onResult(true, "Calibration successful! Variance: %.3f. Neutral pose set.".format(totalVariance))
+                    }
+                } else {
+                    Log.w("BluetoothController", "Calibration failed due to phone motion. Variance: $totalVariance")
+                    withContext(Dispatchers.Main) {
+                        onResult(false, "Phone moved during calibration (Variance: %.2f). Hold steady and try again.".format(totalVariance))
+                    }
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Not enough sensor samples collected. Try again.")
+                }
+            }
+        }
+    }
+
     fun startAirMouse(): Boolean {
         if (isAirMouseActive) return true
 
@@ -131,8 +205,6 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             Log.w("BluetoothController", "Gyroscope sensor not available on this device!")
             return false
         }
-
-        calibrateGyro()
 
         val regGyro = sensorManager?.registerListener(
             this,
@@ -159,19 +231,15 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         Log.i("BluetoothController", "Air-mouse mode stopped")
     }
 
-    fun toggleAirMouse(): Boolean {
-        return if (isAirMouseActive) {
-            stopAirMouse()
-            false
-        } else {
-            startAirMouse()
-        }
+    fun shutdown() {
+        stopAirMouse()
+        controllerScope.cancel()
     }
 
-    fun isAirMouseActive(): Boolean = isAirMouseActive
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (!isAirMouseActive || event == null) return
+        if (event == null) return
 
         when (event.sensor.type) {
             Sensor.TYPE_GAME_ROTATION_VECTOR, Sensor.TYPE_ROTATION_VECTOR -> {
@@ -180,40 +248,41 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             }
 
             Sensor.TYPE_GYROSCOPE -> {
-                val timestamp = event.timestamp
                 val rawGyroX = event.values[0] // pitch
                 val rawGyroY = event.values[1] // roll
                 val rawGyroZ = event.values[2] // yaw
 
-                // Calculate total angular velocity magnitude
+                if (isCalibratingWizard) {
+                    calibrationSamplesX.add(rawGyroX)
+                    calibrationSamplesY.add(rawGyroY)
+                    calibrationSamplesZ.add(rawGyroZ)
+                    return
+                }
+
+                if (!isAirMouseActive) return
+
+                val timestamp = event.timestamp
                 val motionMag = sqrt(rawGyroX * rawGyroX + rawGyroY * rawGyroY + rawGyroZ * rawGyroZ)
 
-                // Update Exponential Moving Average of stillness
                 stillnessEma = 0.90f * stillnessEma + 0.10f * motionMag
 
-                // CONTINUOUS DYNAMIC AUTO-CALIBRATION:
-                // When phone is still or resting (motionMag < 0.045 rad/s and stillnessEma < 0.045 rad/s),
-                // dynamically update DC bias towards current raw readings and suppress motion.
                 if (motionMag < 0.045f && stillnessEma < 0.045f) {
                     val alpha = 0.08f
                     gyroBiasX = (1 - alpha) * gyroBiasX + alpha * rawGyroX
                     gyroBiasY = (1 - alpha) * gyroBiasY + alpha * rawGyroY
                     gyroBiasZ = (1 - alpha) * gyroBiasZ + alpha * rawGyroZ
-                    return // Zero output when resting/still
+                    return
                 }
 
-                // Subtract dynamically tracked DC bias
                 val cleanX = rawGyroX - gyroBiasX
                 val cleanY = rawGyroY - gyroBiasY
                 val cleanZ = rawGyroZ - gyroBiasZ
 
-                // Adaptive deadzone gate
                 val deadzone = 0.032f
                 var deltaX = if (abs(cleanZ) > deadzone) -cleanZ else 0f
                 var deltaY = if (abs(cleanX) > deadzone) -cleanX else 0f
 
                 if (hasRotationMatrix) {
-                    // 3D Gravity Projection onto screen coordinates
                     val projX = -(cleanZ * rotationMatrix[8] + cleanY * rotationMatrix[5] + cleanX * rotationMatrix[2])
                     val projY = -(cleanX * rotationMatrix[0] + cleanY * rotationMatrix[3] + cleanZ * rotationMatrix[6])
 
@@ -221,51 +290,16 @@ class BluetoothController(private val context: Context) : SensorEventListener {
                     deltaY = if (abs(projY) > deadzone) projY else 0f
                 }
 
-                if (deltaX == 0f && deltaY == 0f) return
+                val smoothDx = filterX.filter(deltaX, timestamp)
+                val smoothDy = filterY.filter(deltaY, timestamp)
 
-                // Smooth 1€ Filter
-                val filteredX = filterX.filter(deltaX, timestamp)
-                val filteredY = filterY.filter(deltaY, timestamp)
+                val scaledDx = (smoothDx * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
+                val scaledDy = (smoothDy * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
 
-                // Scale and clamp per-frame displacement to prevent cursor jumps
-                val dx = (filteredX * pointerSensitivity * 22f).coerceIn(-30f, 30f)
-                val dy = (filteredY * pointerSensitivity * 22f).coerceIn(-30f, 30f)
-
-                if (abs(dx) > 0.05f || abs(dy) > 0.05f) {
-                    pointerUpdateListener?.invoke(dx, dy)
-
-                    when (RemoteManager.activeTargetType) {
-                        RemoteManager.TargetDeviceType.WINDOWS_PC -> {
-                            PcRemoteProtocol.sendMouseMove(dx, dy)
-                        }
-                        else -> {
-                            controllerScope.launch {
-                                Atrpv2Protocol.injectPointer(dx, dy, isAbsolute = false)
-                            }
-                        }
-                    }
+                if (abs(scaledDx) > 0.1f || abs(scaledDy) > 0.1f) {
+                    pointerUpdateListener?.invoke(scaledDx, scaledDy)
                 }
             }
         }
     }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    fun setSensitivity(sensitivity: Float) {
-        this.pointerSensitivity = sensitivity.coerceIn(0.2f, 4.0f)
-        Log.d("BluetoothController", "Pointer sensitivity set to: $pointerSensitivity")
-    }
-
-    fun isBluetoothAvailable(): Boolean {
-        return bluetoothManager != null && bluetoothAdapter != null && bluetoothAdapter.isEnabled
-    }
-
-    fun shutdown() {
-        stopAirMouse()
-        controllerScope.cancel()
-    }
-}
-
-fun Context.getBluetoothController(): BluetoothController {
-    return BluetoothController(this)
 }

@@ -9,15 +9,14 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.math.BigInteger
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.security.interfaces.RSAPublicKey
 import java.util.Calendar
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
@@ -27,9 +26,9 @@ import javax.net.ssl.X509TrustManager
 import javax.security.auth.x500.X500Principal
 
 /**
- * Android TV Remote Protocol v2 (ATRPv2) Client for Google TV & Android TV
+ * Android TV Remote Protocol v2 (ATRPv2) Client
  * Ports: 6466 (Control), 6467 (Pairing)
- * Transport: Persistent Authenticated TLS 1.2 Socket with Protobuf Wire-Format Frame Injection
+ * Transport: Persistent Authenticated TLS 1.2 Socket with Protobuf Wire-Format Message Injection
  */
 object Atrpv2Protocol {
 
@@ -125,44 +124,25 @@ object Atrpv2Protocol {
     @Volatile
     var pairingCode: String = ""
 
-    private var controlSocket: Socket? = null
-    private var pairingSocket: Socket? = null
+    private var controlSocket: SSLSocket? = null
+    private var pairingSocket: SSLSocket? = null
     private var sslContextCache: SSLContext? = null
-    private var pairingSslContextCache: SSLContext? = null
     private val connectionLock = Any()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Volatile
     private var pairingToken: String? = null
+    @Volatile
+    private var tvServerCertificate: X509Certificate? = null
+    @Volatile
+    private var clientCertificate: X509Certificate? = null
 
     fun resetSslContext() {
         sslContextCache = null
-        pairingSslContextCache = null
     }
 
     /**
-     * TLS 1.2 Context for Port 6467 Pairing
-     */
-    @Synchronized
-    private fun getPairingSslContext(): SSLContext {
-        pairingSslContextCache?.let { return it }
-
-        val trustAll = arrayOf<TrustManager>(
-            object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            }
-        )
-
-        val ctx = SSLContext.getInstance("TLSv1.2")
-        ctx.init(null, trustAll, SecureRandom())
-        pairingSslContextCache = ctx
-        return ctx
-    }
-
-    /**
-     * TLS 1.2 Context for Port 6466 Control
+     * Authenticated TLS 1.2 Context using AndroidKeyStore RSA 2048 Client Certificate
      */
     @Synchronized
     private fun getSslContext(): SSLContext {
@@ -215,13 +195,20 @@ object Atrpv2Protocol {
                 Log.i("ATRPv2", "Generated AndroidKeyStore RSA 2048 client certificate V5")
             }
 
+            val entry = ks.getEntry("AirRemoteKeyV5", null) as? KeyStore.PrivateKeyEntry
+            clientCertificate = entry?.certificate as? X509Certificate
+
             val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
             kmf.init(ks, null)
 
             val trustAll = arrayOf<TrustManager>(
                 object : X509TrustManager {
                     override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                        if (chain.isNotEmpty()) {
+                            tvServerCertificate = chain[0]
+                        }
+                    }
                     override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                 }
             )
@@ -231,8 +218,21 @@ object Atrpv2Protocol {
             sslContextCache = ctx
             return ctx
         } catch (e: Exception) {
-            Log.e("ATRPv2", "Error initializing AndroidKeyStore SSLContext: ${e.message}")
-            return getPairingSslContext()
+            Log.e("ATRPv2", "Error initializing SSLContext: ${e.message}")
+            val ctx = SSLContext.getInstance("TLSv1.2")
+            ctx.init(null, arrayOf<TrustManager>(
+                object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                        if (chain.isNotEmpty()) {
+                            tvServerCertificate = chain[0]
+                        }
+                    }
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                }
+            ), SecureRandom())
+            sslContextCache = ctx
+            return ctx
         }
     }
 
@@ -245,42 +245,31 @@ object Atrpv2Protocol {
 
         scope.launch {
             try {
-                Log.i("ATRPv2", "Starting ATRPv2 pairing on port 6467 for $cleanIp...")
+                Log.i("ATRPv2", "Starting ATRPv2 TLS pairing on port 6467 for $cleanIp...")
                 callback?.onPairingStarted()
 
-                var socket: Socket? = null
+                val sslFactory = getSslContext().socketFactory
+                val sslSocket = sslFactory.createSocket() as SSLSocket
+                sslSocket.connect(InetSocketAddress(cleanIp, 6467), 5000)
+                sslSocket.soTimeout = 8000
+                sslSocket.startHandshake()
 
-                // Try Plain Socket First
-                try {
-                    val pSocket = Socket()
-                    pSocket.connect(InetSocketAddress(cleanIp, 6467), 4000)
-                    pSocket.soTimeout = 8000
-                    socket = pSocket
-                    Log.i("ATRPv2", "Connected via Plain TCP Socket to $cleanIp:6467")
-                } catch (e: Exception) {
-                    Log.w("ATRPv2", "Plain TCP pairing connection failed: ${e.message}, attempting TLS...")
+                // Capture TV Server Certificate from TLS session
+                val peerCerts = sslSocket.session.peerCertificates
+                if (peerCerts.isNotEmpty()) {
+                    tvServerCertificate = peerCerts[0] as? X509Certificate
                 }
 
-                // Fallback to TLS Socket
-                if (socket == null) {
-                    val sslFactory = getPairingSslContext().socketFactory
-                    val sslSocket = sslFactory.createSocket() as SSLSocket
-                    sslSocket.connect(InetSocketAddress(cleanIp, 6467), 5000)
-                    sslSocket.soTimeout = 8000
-                    socket = sslSocket
-                    Log.i("ATRPv2", "Connected via TLS Socket to $cleanIp:6467")
-                }
-
-                pairingSocket = socket
+                pairingSocket = sslSocket
 
                 val pairingRequest = buildPairingRequestFrame()
-                val out = socket.outputStream
+                val out = sslSocket.outputStream
                 out.write(pairingRequest)
                 out.flush()
 
                 Log.i("ATRPv2", "[PAIRING SIGNAL TRANSMITTED] Sent Protobuf PAIRING_REQUEST frame to $cleanIp:6467")
 
-                val input = socket.inputStream
+                val input = sslSocket.inputStream
                 val response = readFrame(input)
                 if (response != null && response.frameType == FrameType.PAIRING_RESPONSE) {
                     val pin = parsePinFromResponse(response)
@@ -295,7 +284,7 @@ object Atrpv2Protocol {
                         }
                     }
                 } else {
-                    Log.w("ATRPv2", "[PAIRING REJECTED] TV did not return pairing response on $cleanIp:6467")
+                    Log.w("ATRPv2", "[PAIRING REJECTED] TV did not return valid pairing response on $cleanIp:6467")
                     withContext(Dispatchers.Main) {
                         callback?.onPairingFailed("TV rejected Wi-Fi pairing on port 6467. Enable 'Control by Mobile App' in TV settings or use Bluetooth HID mode.")
                     }
@@ -325,6 +314,27 @@ object Atrpv2Protocol {
     }
 
     /**
+     * Calculate Cryptographic SHA-256 Secret Hash for ATRPv2 Secret Verification
+     */
+    private fun calculatePairingSecretHash(pin: String): ByteArray {
+        val clientCert = clientCertificate
+        val tvCert = tvServerCertificate
+
+        val md = MessageDigest.getInstance("SHA-256")
+        if (clientCert?.publicKey is RSAPublicKey && tvCert?.publicKey is RSAPublicKey) {
+            val clientKey = clientCert.publicKey as RSAPublicKey
+            val tvKey = tvCert.publicKey as RSAPublicKey
+
+            md.update(clientKey.modulus.toByteArray())
+            md.update(clientKey.publicExponent.toByteArray())
+            md.update(tvKey.modulus.toByteArray())
+            md.update(tvKey.publicExponent.toByteArray())
+        }
+        md.update(pin.toByteArray(Charsets.UTF_8))
+        return md.digest()
+    }
+
+    /**
      * Submit 6-digit PIN to complete pairing
      */
     fun submitPin(pin: String, callback: PairingCallback?) {
@@ -332,15 +342,17 @@ object Atrpv2Protocol {
         val cleanIp = ip.removePrefix("/")
         scope.launch {
             try {
-                Log.i("ATRPv2", "Submitting PIN: $pin to $cleanIp:6467...")
+                Log.i("ATRPv2", "Submitting secret hash for PIN: $pin to $cleanIp:6467...")
 
-                val socket = pairingSocket ?: Socket().also {
+                val socket = pairingSocket ?: (getSslContext().socketFactory.createSocket() as SSLSocket).also {
                     it.connect(InetSocketAddress(cleanIp, 6467), 5000)
                     it.soTimeout = 8000
+                    it.startHandshake()
                 }
 
+                val secretBytes = calculatePairingSecretHash(pin)
                 val out = socket.outputStream
-                val pinFrame = buildPinSubmissionFrame(pin)
+                val pinFrame = buildPinSubmissionFrame(secretBytes)
                 out.write(pinFrame)
                 out.flush()
 
@@ -360,7 +372,7 @@ object Atrpv2Protocol {
                         isPaired = false
                         isConnected = false
                         val error = parsePairingError(response)
-                        Log.e("ATRPv2", "TV rejected PIN $pin: $error")
+                        Log.e("ATRPv2", "TV rejected secret for PIN $pin: $error")
                         withContext(Dispatchers.Main) {
                             callback?.onPairingFailed(error ?: "TV rejected PIN code")
                         }
@@ -368,7 +380,7 @@ object Atrpv2Protocol {
                 } else {
                     isPaired = false
                     isConnected = false
-                    Log.e("ATRPv2", "TV did not confirm PIN $pin")
+                    Log.e("ATRPv2", "TV did not confirm secret for PIN $pin")
                     withContext(Dispatchers.Main) {
                         callback?.onPairingFailed("TV did not confirm PIN $pin. Ensure PIN on TV screen matches.")
                     }
@@ -399,7 +411,7 @@ object Atrpv2Protocol {
     }
 
     /**
-     * Establish persistent connection to Google TV / Android TV on Port 6466 (Control)
+     * Establish persistent authenticated TLS 1.2 connection to Google TV / Android TV on Port 6466 (Control)
      */
     fun connect(tvIp: String, callback: ConnectCallback?) {
         val cleanIp = tvIp.removePrefix("/")
@@ -408,7 +420,7 @@ object Atrpv2Protocol {
             try {
                 disconnectInternal()
 
-                Log.i("ATRPv2", "Connecting to Google TV / Android TV at $cleanIp:6466 (Control)...")
+                Log.i("ATRPv2", "Connecting to Google TV / Android TV at $cleanIp:6466 (Control TLS 1.2)...")
 
                 var connectedSuccess = false
 
@@ -425,6 +437,9 @@ object Atrpv2Protocol {
                     out.write(handshake)
                     out.flush()
 
+                    val input = sslSocket.inputStream
+                    val response = readFrame(input)
+
                     synchronized(connectionLock) {
                         controlSocket = sslSocket
                         isConnected = true
@@ -433,25 +448,7 @@ object Atrpv2Protocol {
                     connectedSuccess = true
                     Log.i("ATRPv2", "[AUTHENTICATED TLS ESTABLISHED] Connected to Google TV at $cleanIp:6466")
                 } catch (e: Exception) {
-                    Log.w("ATRPv2", "TLS control connection failed: ${e.message}, attempting direct socket...")
-                }
-
-                // Fallback to Direct Socket
-                if (!connectedSuccess) {
-                    try {
-                        val pSocket = Socket()
-                        pSocket.connect(InetSocketAddress(cleanIp, 6466), 4000)
-                        pSocket.soTimeout = 0
-                        synchronized(connectionLock) {
-                            controlSocket = pSocket
-                            isConnected = true
-                            isPaired = true
-                        }
-                        connectedSuccess = true
-                        Log.i("ATRPv2", "[DIRECT SOCKET ESTABLISHED] Connected to $cleanIp:6466")
-                    } catch (e: Exception) {
-                        Log.w("ATRPv2", "Direct socket control connection failed: ${e.message}")
-                    }
+                    Log.w("ATRPv2", "TLS control connection failed: ${e.message}")
                 }
 
                 if (connectedSuccess) {
@@ -463,7 +460,7 @@ object Atrpv2Protocol {
                 } else {
                     isConnected = false
                     withContext(Dispatchers.Main) {
-                        callback?.onConnectionFailed("Could not connect to Google TV / Android TV at $cleanIp:6466. Ensure TV is powered on and on local Wi-Fi.")
+                        callback?.onConnectionFailed("Could not connect to Google TV / Android TV at $cleanIp:6466. Ensure TV is powered on and pairing code was entered.")
                     }
                 }
 
@@ -538,7 +535,7 @@ object Atrpv2Protocol {
             }
 
             if (!sent) {
-                sendFallbackKeySequence(ip, keyCode)
+                Log.w("ATRPv2", "Control socket disconnected. Reconnect required.")
             }
 
             withContext(Dispatchers.Main) {
@@ -571,7 +568,7 @@ object Atrpv2Protocol {
                         Log.d("ATRPv2", "[GOOGLE TV MOTION DELIVERED] dx=$clampedX, dy=$clampedY")
                     } catch (_: Exception) {}
                 }
-            } ?: sendHttpPointer(ip, clampedX, clampedY)
+            }
         }
     }
 
@@ -595,7 +592,7 @@ object Atrpv2Protocol {
                         out.flush()
                     } catch (_: Exception) {}
                 }
-            } ?: sendHttpScroll(ip, dx, dy)
+            }
         }
     }
 
@@ -610,6 +607,12 @@ object Atrpv2Protocol {
     private fun writeProtobufString(stream: ByteArrayOutputStream, fieldNumber: Int, value: String) {
         writeProtobufTag(stream, fieldNumber, 2) // Wire type 2 = Length-Delimited
         val bytes = value.toByteArray(Charsets.UTF_8)
+        writeVarint(stream, bytes.size)
+        stream.write(bytes)
+    }
+
+    private fun writeProtobufBytes(stream: ByteArrayOutputStream, fieldNumber: Int, bytes: ByteArray) {
+        writeProtobufTag(stream, fieldNumber, 2) // Wire type 2 = Length-Delimited
         writeVarint(stream, bytes.size)
         stream.write(bytes)
     }
@@ -657,9 +660,9 @@ object Atrpv2Protocol {
         return lengthPrefixedFrame(outer.toByteArray())
     }
 
-    private fun buildPinSubmissionFrame(pin: String): ByteArray {
+    private fun buildPinSubmissionFrame(secretHash: ByteArray): ByteArray {
         val inner = ByteArrayOutputStream()
-        writeProtobufString(inner, 1, pin) // Field 1: pin / secret string
+        writeProtobufBytes(inner, 1, secretHash) // Field 1: secret bytes
 
         val innerBytes = inner.toByteArray()
 
@@ -783,82 +786,6 @@ object Atrpv2Protocol {
         } catch (_: Exception) {
             return "Pairing failed"
         }
-    }
-
-    private fun sendFallbackKeySequence(ip: String?, keyCode: Int) {
-        val cleanIp = ip?.removePrefix("/") ?: return
-        try {
-            val sslFactory = getSslContext().socketFactory
-            val sslSocket = sslFactory.createSocket() as SSLSocket
-            sslSocket.connect(InetSocketAddress(cleanIp, 6466), 1000)
-            sslSocket.soTimeout = 300
-            sslSocket.startHandshake()
-
-            val out = sslSocket.outputStream
-            val keyDown = buildKeyEventFrame(keyCode, 0)
-            val keyUp = buildKeyEventFrame(keyCode, 1)
-            out.write(keyDown)
-            out.flush()
-            Thread.sleep(40)
-            out.write(keyUp)
-            out.flush()
-
-            val bytesAvailable = try { sslSocket.inputStream.available() } catch (_: Exception) { 0 }
-            sslSocket.close()
-            Log.i("ATRPv2", "[AUTHENTICATED TLS DELIVERED TO $cleanIp] Key $keyCode delivered over TLS 1.2! (Bytes: $bytesAvailable)")
-        } catch (_: Exception) {
-            sendMultiProtocolFallback(cleanIp, keyCode)
-        }
-    }
-
-    private fun sendMultiProtocolFallback(ip: String, keyCode: Int) {
-        val cleanIp = ip?.removePrefix("/") ?: return
-        try {
-            val url = java.net.URL("http://$cleanIp:8080/remote/key?code=$keyCode")
-            val conn = url.openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 400
-            conn.readTimeout = 400
-            conn.requestMethod = "POST"
-            val code = conn.responseCode
-            conn.disconnect()
-            Log.i("ATRPv2", "[TV ACK CONFIRMED FROM $cleanIp] HTTP $code ACK received!")
-        } catch (_: Exception) {}
-
-        try {
-            val udpSocket = DatagramSocket()
-            udpSocket.soTimeout = 300
-            val msg = "KEY:$keyCode".toByteArray(Charsets.UTF_8)
-            val packet = DatagramPacket(msg, msg.size, InetAddress.getByName(cleanIp), 6466)
-            udpSocket.send(packet)
-            udpSocket.close()
-            Log.i("ATRPv2", "[TV ACK CONFIRMED FROM $cleanIp] UDP ACK verified!")
-        } catch (_: Exception) {}
-    }
-
-    private fun sendHttpPointer(ip: String, x: Float, y: Float) {
-        val cleanIp = ip.removePrefix("/")
-        try {
-            val url = java.net.URL("http://$cleanIp:8080/remote/pointer?x=$x&y=$y")
-            val conn = url.openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 300
-            conn.readTimeout = 300
-            conn.requestMethod = "POST"
-            conn.responseCode
-            conn.disconnect()
-        } catch (_: Exception) {}
-    }
-
-    private fun sendHttpScroll(ip: String, dx: Float, dy: Float) {
-        val cleanIp = ip.removePrefix("/")
-        try {
-            val url = java.net.URL("http://$cleanIp:8080/remote/scroll?dx=$dx&dy=$dy")
-            val conn = url.openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 300
-            conn.readTimeout = 300
-            conn.requestMethod = "POST"
-            conn.responseCode
-            conn.disconnect()
-        } catch (_: Exception) {}
     }
 
     private fun writeVarint(stream: ByteArrayOutputStream, value: Int) {
