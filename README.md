@@ -66,6 +66,14 @@ For third-party Wi-Fi remote apps to control your TV, specific TV menu settings 
 
 ---
 
+## Download APK from GitHub
+
+The version-tag workflow `.github/workflows/release-apk.yml` builds/tests the app and attaches the APK to a GitHub Release when a `v*` tag is pushed. Releases are published at:
+
+[Air Remote GitHub Releases](https://github.com/vijay3695/Air-remote/releases)
+
+The workflow currently publishes a **debug-signed APK** for testing. A debug APK may require uninstalling a prior build before installing a later build if its signing key differs. Do not publish a release tag until the source build passes and the intended device tests have been completed.
+
 ## Windows PC receiver setup
 
 1. Connect the Windows PC and Android phone to the same LAN.
