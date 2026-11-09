@@ -5,12 +5,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import kotlinx.coroutines.*}
+import kotlinx.coroutines.*
 
 /**
  * TV Companion App - Handles Android TV memory management and connection reliability
@@ -19,7 +21,8 @@ import kotlinx.coroutines.*}
  */
 class TvCompanionManager(private val context: Context) {
 
-    private val notificationManager: NotificationManager?
+    private val notificationManager: NotificationManager? = 
+        context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
     private var foregroundServiceRunning: Boolean = false
     private var lastConnectionState: Boolean = false
     private var lastTvIp: String = ""
@@ -36,15 +39,17 @@ class TvCompanionManager(private val context: Context) {
         wakeLockTracker.acquire()
 
         // Create notification channel (Android 8.0+)
-        notificationManager?.let { manager ->
-            val channel = NotificationChannel(
-                "magic_remote_companion",
-                "Magic Remote Companion",
-                android.app.NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Background service for TV connectivity"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notificationManager?.let { manager ->
+                val channel = NotificationChannel(
+                    "air_remote_companion",
+                    "Air Remote Companion",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Background service for TV connectivity"
+                }
+                manager.createNotificationChannel(channel)
             }
-            manager.createNotificationChannel(channel)
         }
 
         // Show foreground service notification
@@ -101,7 +106,7 @@ class TvCompanionManager(private val context: Context) {
     /** Inner class: Reconnection logic with exponential backoff */
     inner class ReconnectionHelper(private val appContext: Context) {
         private var currentBackoffMs: Long = 5000
-        private var reconnectionTask: CoroutineScope? = null
+        private var reconnectionRunnable: Runnable? = null
         private val handler = Handler(Looper.getMainLooper())
 
         fun startMonitoring() {
@@ -110,7 +115,8 @@ class TvCompanionManager(private val context: Context) {
         }
 
         fun stopMonitoring() {
-            handler.removeCallbacksAndMessages(null)
+            reconnectionRunnable?.let { handler.removeCallbacks(it) }
+            reconnectionRunnable = null
             currentBackoffMs = 5000
         }
 
@@ -119,11 +125,11 @@ class TvCompanionManager(private val context: Context) {
         }
 
         fun scheduleReconnection(tvIp: String?) {
-            handler.removeCallbacksAndMessages(null)
+            reconnectionRunnable?.let { handler.removeCallbacks(it) }
 
             val tvIpToUse = tvIp ?: lastTvIp
 
-            reconnectionTask = Handler(Looper.getMainLoper()).postDelayed({
+            reconnectionRunnable = Runnable {
                 // Attempt reconnection
                 // Would trigger MainActivity to attempt connection
                 Log.d("ReconnectionHelper", "Attempting reconnection to $tvIpToUse")
@@ -131,25 +137,29 @@ class TvCompanionManager(private val context: Context) {
                 // If fails, schedule next attempt with increased backoff
                 currentBackoffMs = Math.min(currentBackoffMs * 2, 60000)
                 scheduleReconnection(tvIpToUse)
-            }, currentBackoffMs)
+            }
+
+            handler.postDelayed(reconnectionRunnable!!, currentBackoffMs)
         }
     }
 
     /** Inner class: WakeLock management */
     inner class WakeLockTracker(private val ctx: Context) {
-        private var wifiLock: android.os.WifiManager.WifiLock? = null
-        private var cpuLock: android.os.PowerManager.WakeLock? = null
+        private var wifiLock: WifiManager.WifiLock? = null
+        private var cpuLock: PowerManager.WakeLock? = null
 
         fun acquire() {
             val powerManager = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
 
             // WiFi lock - keeps WiFi alive even when screen is off
-            wifiLock = powerManager.createWifiLock(android.os.PowerManager.WIFI_MODE_FULL_HIGH_PERF, "magic_remote_wifi")
-            wifiLock!!.acquire()
+            val wifiManager = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "magic_remote_wifi")
+            wifiLock?.acquire()
 
             // CPU lock - keeps process from being killed (strategic, short durations)
-            cpuLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "magic_remote_cpu")
-            cpuLock!!.acquire(10 * 60 * 1000L) // 10 minute max
+            cpuLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "magic_remote_cpu")
+            // Use acquire() without timeout for continuous lock, or with timeout for strategic use
+            cpuLock?.acquire()
         }
 
         fun release() {
@@ -161,14 +171,14 @@ class TvCompanionManager(private val context: Context) {
     /** Show foreground service notification */
     private fun showForegroundNotification() {
         notificationManager?.let { manager ->
-            val notification = NotificationCompat.Builder(context, "magic_remote_companion")
+            val notification = NotificationCompat.Builder(context, "air_remote_companion")
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentText("Magic Remote - Connecting to TV")
-                .setContentTitle("Magic Remote")
+                .setContentText("Air Remote - Connecting to TV")
+                .setContentTitle("Air Remote")
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
 
-            manager.notify(12345, notification)
+            manager.notify(12345, notification.build())
         }
     }
 }

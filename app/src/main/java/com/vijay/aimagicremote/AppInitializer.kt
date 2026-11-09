@@ -17,13 +17,10 @@ class AppInitializer : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("MagicRemote", "Application started - Magic Remote initializing")
+        Log.d("AirRemote", "Application started - Air Remote initializing")
 
         // Initialize TV discovery manager for mDNS service discovery
         tvDiscovery = TvDiscoveryManager(getApplicationContext())
-
-        // Connection service will be started/stopped via foreground service
-        // when user opens the app
     }
 
     /**
@@ -55,8 +52,10 @@ class AppInitializer : Application() {
     /**
      * Clean up resources when app process is destroyed
      */
-    onDestructor() {
+    override fun onTerminate() {
+        super.onTerminate()
         tvDiscovery = null
         tvConnection = null
         Log.d("MagicRemote", "Application shutting down")
     }
+}

@@ -20,7 +20,7 @@ object LwProtocolAdapter {
     fun isLgTv(host: String): Boolean {
         // Try to identify LG TV by checking response patterns
         // In practice, this would be based on known LG TV IP ranges or
-        -try {
+        try {
             // Quick handshake test
             // return response contains LG-specific markers
             return false // Placeholder - actual implementation would test TV

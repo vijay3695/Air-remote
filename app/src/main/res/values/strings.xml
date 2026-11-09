@@ -1,19 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <string name="app_name">Magic Remote</string>
-    <string name="title_activity_main">Magic Remote</string>
+    <string name="app_name">Air Remote</string>
+    <string name="title_activity_main">Air Remote</string>
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
     <string name="air_mouse">Air Mouse</string>
     <string name="trackpad">Trackpad</string>
     <string name="ready">Ready</string>
-    <string name="connected">Connected to {0}</string>
+    <string name="connected">Connected to %1$s</string>
     <string name="failed">Failed to connect</string>
     <string name="auto_discovery">Auto-discovery</string>
-    <string name="discovery_started">Auto-discovery started...</string>
+    <string name="discovery_started">Scanning Wi-Fi network for TVs...</string>
 
-    <!-- Remote control button labels -->
     <string name="btn_back">BACK</string>
     <string name="btn_up">UP</string>
     <string name="btn_ok">OK</string>
@@ -25,3 +23,4 @@
     <string name="btn_mute">MUTE</string>
     <string name="btn_volup">VOL+</string>
     <string name="btn_voldown">VOL-</string>
+</resources>
