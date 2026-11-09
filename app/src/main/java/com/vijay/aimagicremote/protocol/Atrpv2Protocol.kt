@@ -1,5 +1,6 @@
 package com.vijay.aimagicremote.protocol
 
+import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log
@@ -86,11 +87,14 @@ object Atrpv2Protocol {
     private const val CONTROL_PORT = 6466
     private const val STATUS_OK = 200
 
+    private var appContext: Context? = null
     private var pairingSocket: SSLSocket? = null
     private var controlSocket: SSLSocket? = null
     private var sslContextCache: SSLContext? = null
     private var clientCertificate: X509Certificate? = null
     private var tvServerCertificate: X509Certificate? = null
+    @Volatile private var handshakeIp: String? = null
+    @Volatile private var pairingHandshake: Boolean = false
     private var readerJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val pairingLock = Any()
@@ -144,7 +148,14 @@ object Atrpv2Protocol {
             object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
                 override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                    if (chain.isNotEmpty()) tvServerCertificate = chain[0]
+                    val certificate = chain.firstOrNull() ?: throw java.security.cert.CertificateException("TV sent no certificate")
+                    val fingerprint = certificateFingerprint(certificate)
+                    val ip = handshakeIp
+                    val pinned = if (ip.isNullOrBlank()) null else prefs()?.getString(certificatePref(ip), null)
+                    if (!pairingHandshake && pinned != null && !pinned.equals(fingerprint, ignoreCase = true)) {
+                        throw java.security.cert.CertificateException("Android TV certificate changed. Pair the TV again.")
+                    }
+                    tvServerCertificate = certificate
                 }
                 override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
             }
@@ -155,7 +166,26 @@ object Atrpv2Protocol {
         }
     }
 
+    fun initialize(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    private fun prefs() = appContext?.getSharedPreferences("android_tv_pairing", Context.MODE_PRIVATE)
+    private fun certificatePref(ip: String) = "tv-certificate:$ip"
+
+    private fun certificateFingerprint(certificate: X509Certificate): String =
+        MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+            .joinToString("") { "%02x".format(it) }
+
+    private fun saveTvCertificatePin(ip: String) {
+        tvServerCertificate?.let { certificate ->
+            prefs()?.edit()?.putString(certificatePref(ip), certificateFingerprint(certificate))?.apply()
+        }
+    }
+
     private fun newTlsSocket(ip: String, port: Int, timeoutMs: Int = 8000): SSLSocket {
+        handshakeIp = ip
+        pairingHandshake = port == PAIRING_PORT
         val socket = getSslContext().socketFactory.createSocket() as SSLSocket
         try {
             socket.connect(InetSocketAddress(ip, port), 5000)
@@ -166,6 +196,9 @@ object Atrpv2Protocol {
         } catch (e: Exception) {
             runCatching { socket.close() }
             throw e
+        } finally {
+            pairingHandshake = false
+            handshakeIp = null
         }
     }
 
@@ -319,8 +352,9 @@ object Atrpv2Protocol {
                 sendEnvelope(socket, 40, secretMessage) // pairing_secret
                 expectPayload(socket, 41, "pairing secret")
                 isPaired = true
+                saveTvCertificatePin(currentTvIp ?: "")
                 closePairingSocket()
-                Log.i(TAG, "Android TV pairing secret accepted.")
+                Log.i(TAG, "Android TV pairing secret accepted and TV certificate pinned.")
                 withContext(Dispatchers.Main) {
                     callback?.invoke(true, "Pairing verified by the TV.")
                 }
@@ -338,6 +372,7 @@ object Atrpv2Protocol {
     fun connect(tvIp: String, callback: ConnectCallback?) {
         val ip = tvIp.trim().removePrefix("/")
         currentTvIp = ip
+        isPaired = !ip.isBlank() && prefs()?.contains(certificatePref(ip)) == true
         scope.launch {
             disconnectInternal(notify = false)
             try {
