@@ -1,6 +1,6 @@
 # Air Remote (Air Mouse, Trackpad & Multi-Brand Smart TV Control)
 
-**Air Remote** is an Android application (`com.vijay.aimagicremote`) that turns an Android smartphone into a zero-drift **Gyroscope Air Mouse**, **Trackpad**, and **Universal Remote Control** for **Android TV / Google TV**, **Samsung Tizen TV**, **TCL Roku TV**, **LG webOS TV**, and **Windows PC**.
+**Air Remote** is an Android application (`com.vijay.aimagicremote`) that turns an Android smartphone into a calibrated **Gyroscope Air Mouse**, **Trackpad**, and multi-platform remote control for **Android TV / Google TV**, **Samsung Tizen TV**, **TCL Roku TV**, **LG webOS TV**, and **Windows PC**.
 
 ---
 
@@ -12,18 +12,18 @@ Project plans, design notes, protocol references, and the current issue/repair r
 
 ## 🚀 Key Features & Architecture
 
-- **iOS 18 Dark Glassmorphism UI**: Header status pill badge (`● Connected`), 3 target device modes, 3 mode tabs, and a 3x4 D-pad remote button grid.
+- **Android dark UI**: Header status pill badge (`● Connected`), 3 target device modes, 3 mode tabs, and a 3x4 D-pad remote button grid.
 - **Multi-Brand TV Protocol Engine (`RemoteManager.kt`)**:
   - **Android TV / Google TV (ATRPv2)**: Persistent TLS 1.2 control socket on port `6466` & Protobuf 6-digit PIN pairing server on port `6467`.
   - **Samsung Tizen Smart TV**: WebSocket JSON control channel on ports `8001` (`ws://`) and `8002` (`wss://`).
   - **TCL / Roku Smart TV**: HTTP External Control Protocol (ECP) on port `8060`.
   - **LG webOS Smart TV**: SSAP WebSocket channel on ports `3000` / `3001`.
-  - **Windows PC**: Low-latency TCP/UDP control socket on port `9090`.
-  - **Bluetooth HID**: Not implemented yet; the app reports this target as unavailable instead of falsely connecting.
+  - **Windows PC**: TCP command channel on port `9090`; UDP is used only for discovery.
+  - **Bluetooth HID**: Not implemented; the app reports this target as unavailable.
 - **3D Gravity-Compensated Motion Engine (`BluetoothController.kt`)**:
   - `Sensor.TYPE_GAME_ROTATION_VECTOR` + `Sensor.TYPE_GYROSCOPE` 3D sensor fusion.
-  - **1€ Filter** smoothing algorithm (`minCutoff = 1.2f`, `beta = 0.08f`) for zero jitter.
-  - **Continuous Dynamic Auto-Calibration**: Stillness Exponential Moving Average (EMA) tracking automatically zeroes out resting DC bias.
+  - **1€ Filter** smoothing algorithm (`minCutoff = 1.2f`, `beta = 0.08f`) to reduce jitter.
+  - **Calibration**: guided gyro-bias sampling plus continuous stillness-based drift correction; results depend on phone sensors and grip.
 - **Auto-Discovery Engine (`TvDiscoveryManager.kt`)**: mDNS (`_androidtvremote._tcp`, `_workstation._tcp`) and LAN UDP Broadcast Ping on port `9090`.
 
 ---
@@ -59,10 +59,17 @@ For third-party Wi-Fi remote apps to control your TV, specific TV menu settings 
 - **On-Screen Prompt Required**:
   - When connecting to a Samsung TV for the first time, look at your Samsung TV screen for the pop-up prompt **"Allow Air Remote to connect?"** and select **Allow** using your physical remote.
 
-### 3. Alternative: Bluetooth HID Direct Mode (No PIN / No Wi-Fi Port Restrictions)
-- If your TV drops Wi-Fi ports, select **Bluetooth HID** target mode in the app.
-- Pair your phone to your TV via Bluetooth (**Settings** → **Remotes & Accessories** → **Add Accessory** on TV).
-- Your phone will act as an official Bluetooth Wireless Hardware Remote & Air Mouse directly without Wi-Fi port dependencies.
+### 3. LG webOS
+- Accept the SSAP registration prompt on the TV the first time.
+- The TV-issued client key is stored locally and reused for later connections.
+- Air Mouse/pointer commands use the separate webOS pointer socket; firmware permissions can vary.
+
+### 4. Roku OS (including Roku-based TCL TVs)
+- Enable Roku's **Control by mobile apps** / network-control permission in the TV settings.
+- TCL Android TV and Google TV models use Android TV Remote Service, not Roku ECP.
+
+### Bluetooth HID
+- Bluetooth HID device mode is **not implemented yet**. Do not select it as a working remote target.
 
 ---
 
@@ -129,10 +136,10 @@ app/src/main/java/com/vijay/aimagicremote/
 │   ├── SamsungTizenProtocol.kt# Samsung Tizen WebSocket engine (ports 8001/8002)
 │   ├── RokuTclProtocol.kt      # TCL / Roku HTTP ECP engine (port 8060)
 │   ├── LgWebOsProtocol.kt     # LG webOS SSAP WebSocket engine (ports 3000/3001)
-│   ├── PcRemoteProtocol.kt    # Windows PC TCP/UDP engine (port 9090)
+│   ├── PcRemoteProtocol.kt    # Windows PC TCP command engine (port 9090)
 │   └── RemoteManager.kt       # Multi-brand protocol dispatcher
 └── ui/
-    └── MainActivity.kt        # iOS 18 Glassmorphism Dark UI controller
+    └── MainActivity.kt        # Android dark UI controller
 ```
 
 ---
