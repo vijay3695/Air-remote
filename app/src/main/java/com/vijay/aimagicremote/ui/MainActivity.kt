@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
     private var activeMode = "dpad" // "dpad", "air_mouse", "trackpad"
     private var isConnected = false
     private var connectedDeviceIp = ""
+    private var connectionAttempt = 0
 
     // Air Mouse / Trackpad Coordinates Tracking
     private var airMousePosX = 0f
@@ -310,7 +311,7 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
     private fun setTargetDevice(type: RemoteManager.TargetDeviceType) {
-        if (type != activeTarget && isConnected) {
+        if (type != activeTarget && (isConnected || btnConnect?.isEnabled == false)) {
             // Do not leave the UI showing a connected session after switching protocols.
             disconnectDevice()
         }
@@ -741,6 +742,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectToDevice(ip: String) {
+        val attempt = ++connectionAttempt
+        val targetAtStart = activeTarget
         val cleanIp = ip.removePrefix("/")
         connectedDeviceIp = cleanIp
         tvIpAddress?.setText(cleanIp)
@@ -755,6 +758,7 @@ class MainActivity : AppCompatActivity() {
             object : RemoteManager.ConnectCallback {
                 override fun onConnected() {
                     runOnUiThread {
+                        if (attempt != connectionAttempt || targetAtStart != activeTarget) return@runOnUiThread
                         isConnected = true
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Disconnect"
@@ -777,6 +781,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onConnectionFailed(error: String) {
                     runOnUiThread {
+                        if (attempt != connectionAttempt || targetAtStart != activeTarget) return@runOnUiThread
                         isConnected = false
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
@@ -789,6 +794,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onDisconnected() {
                     runOnUiThread {
+                        if (attempt != connectionAttempt || targetAtStart != activeTarget) return@runOnUiThread
                         isConnected = false
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
@@ -830,6 +836,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disconnectDevice() {
+        connectionAttempt++ // Invalidate callbacks from any connection attempt being cancelled.
         RemoteManager.disconnect()
         stopTvConnectionKeepAlive()
         isConnected = false
