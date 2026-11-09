@@ -161,6 +161,10 @@ class MainActivity : AppCompatActivity() {
 
         // Live Pointer update listener for Air Mouse cursor feedback
         bluetoothController?.pointerUpdateListener = { dx, dy ->
+            // Send the sensor movement to the selected remote target.
+            // The UI-only coordinate update is not enough to move the Windows cursor.
+            RemoteManager.sendPointerMove(dx, dy)
+
             runOnUiThread {
                 airMousePosX = (airMousePosX + dx * 2f).coerceIn(-350f, 350f)
                 airMousePosY = (airMousePosY + dy * 2f).coerceIn(-200f, 200f)
