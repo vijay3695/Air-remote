@@ -53,8 +53,24 @@ object RemoteManager {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun setTargetType(type: TargetDeviceType) {
+        val previous = activeTargetType
+        if (previous != type) {
+            disconnectProtocol(previous)
+            isConnected = false
+        }
         activeTargetType = type
         Log.i(TAG, "Target device type set to: $type")
+    }
+
+    private fun disconnectProtocol(type: TargetDeviceType) {
+        when (type) {
+            TargetDeviceType.ANDROID_TV -> Atrpv2Protocol.disconnect()
+            TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.disconnect()
+            TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.disconnect()
+            TargetDeviceType.ROKU_TCL -> RokuTclProtocol.disconnect()
+            TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.disconnect()
+            TargetDeviceType.BLUETOOTH_HID -> Unit
+        }
     }
 
     fun connect(
@@ -65,6 +81,7 @@ object RemoteManager {
         callback: ConnectCallback? = null
     ) {
         setTargetType(targetType)
+        isConnected = false
         val cleanIp = ip.removePrefix("/")
         currentTargetIp = cleanIp
 
@@ -176,14 +193,7 @@ object RemoteManager {
     }
 
     fun disconnect() {
-        when (activeTargetType) {
-            TargetDeviceType.ANDROID_TV -> Atrpv2Protocol.disconnect()
-            TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.disconnect()
-            TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.disconnect()
-            TargetDeviceType.ROKU_TCL -> RokuTclProtocol.disconnect()
-            TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.disconnect()
-            TargetDeviceType.BLUETOOTH_HID -> {}
-        }
+        disconnectProtocol(activeTargetType)
         isConnected = false
     }
 
