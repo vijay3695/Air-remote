@@ -19,6 +19,20 @@ The phone should work like a Magic Remote / gyro air mouse:
 
 The goal is not satisfied by a phone-side pointer animation, changing X/Y labels, sending arbitrary bytes, or claiming success because CI passes. The pointer must visibly move on the actual TV/PC.
 
+## 1A. Shared user experience: cursor must be visible on BOTH TV and desktop
+
+This is a cross-platform Air Mouse requirement, not an optional visual enhancement:
+
+- When Air Mouse is active, the user must see a cursor **on the target screen itself** (TV or Windows desktop).
+- Phone motion must move that visible target-screen cursor in real time.
+- The cursor should be easy to locate, clearly visible against varied backgrounds, and move smoothly without lag or jumps.
+- Starting Air Mouse should make the target cursor available/visible; stopping Air Mouse should cleanly end the Air Mouse interaction and restore normal target behavior. Do not leave a stuck cursor or ghost pointer.
+- The TV and desktop should offer the same basic interaction model: activate Air Mouse → see target cursor → move it with phone motion → click/drag/scroll only where genuinely supported → stop Air Mouse.
+- The implementation mechanism may differ by platform: Windows must move the real OS mouse cursor; TVs must use a native TV pointer channel or a real TV-side cursor/receiver implementation. **Do not fake parity by drawing a cursor only in the phone app or by showing a decorative cursor overlay that does not interact with the TV.**
+- If a TV platform cannot expose or support a real target-screen cursor, mark that platform unsupported/unverified for Air Mouse. Do not silently substitute D-pad navigation or pretend it is a cursor.
+
+Add explicit tests for Air Mouse activation/deactivation, target cursor visibility/readiness, cursor movement, and cleanup after disconnect or target switching. The acceptance criteria below apply to both target-screen cursor visibility and movement, not movement alone.
+
 ## 2. Read the repository documentation and inspect current code first
 
 Read the complete current contents of:
