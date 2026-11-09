@@ -90,6 +90,7 @@ object RemoteManager {
             }
 
             TargetDeviceType.SAMSUNG_TIZEN -> {
+                SamsungTizenProtocol.initialize(context)
                 SamsungTizenProtocol.connect(cleanIp, object : SamsungTizenProtocol.ConnectCallback {
                     override fun onConnected() {
                         isConnected = true
