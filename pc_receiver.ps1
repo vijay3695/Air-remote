@@ -106,7 +106,7 @@ function Escape-SendKeysText([string]$Text) {
         $result = $result.Replace($char, "{$char}")
     }
     # SendKeys uses doubled braces for literal brace characters.
-    $result = $result.Replace("{", "{{").Replace("}", "{}}")
+    $result = $result.Replace("{", "{{}").Replace("}", "{}}")
     return $result
 }
 
