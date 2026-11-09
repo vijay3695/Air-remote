@@ -10,11 +10,15 @@ import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
+import java.net.Socket
 
 /**
  * TV & PC Discovery Manager - discovers Android TVs and Windows PCs on local Wi-Fi.
- * Uses mDNS + LAN UDP broadcast discovery on port 9090.
+ * Uses NetworkInterface IPv4 subnet detection + mDNS + LAN UDP broadcast discovery + fast port scanning.
  */
 class TvDiscoveryManager(private val context: Context) {
 
@@ -47,18 +51,17 @@ class TvDiscoveryManager(private val context: Context) {
     private val activeListeners = mutableListOf<NsdManager.DiscoveryListener>()
 
     fun startDiscovery(listener: ((List<DeviceInfo>) -> Unit)? = null) {
-        // A rescan must actually restart NSD and UDP discovery, not return the
-        // previous scan's cached devices.
         stopDiscovery()
         synchronized(devicesLock) { discoveredDevices.clear() }
         isDiscovering = true
         discoveryListener = listener
-        Log.i("TvDiscovery", "Starting mDNS & LAN UDP discovery for Android TVs and Windows PCs...")
+        Log.i("TvDiscovery", "Starting mDNS, UDP broadcast & active network interface subnet scan...")
 
         val serviceTypes = listOf(
             Pair("_androidtvremote._tcp.", DeviceType.ANDROID_TV),
             Pair("_androidtvremote2._tcp.", DeviceType.ANDROID_TV),
             Pair("_airremote._tcp.", DeviceType.WINDOWS_PC),
+            Pair("_workstation._tcp.", DeviceType.WINDOWS_PC)
         )
 
         for ((type, devType) in serviceTypes) {
@@ -71,8 +74,105 @@ class TvDiscoveryManager(private val context: Context) {
             }
         }
 
-        // Trigger LAN UDP Broadcast scan for Windows PCs
+        // Trigger UDP Broadcast scan for Windows PCs
         sendLanUdpBroadcastPing()
+
+        // Fast parallel subnet scanner across active local network subnet
+        scanSubnetFast()
+    }
+
+    private fun scanSubnetFast() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val baseSubnet = getLocalSubnetPrefix()
+            Log.i("TvDiscovery", "Fast subnet scanner probing active subnet: $baseSubnet(1..254)")
+            val jobs = mutableListOf<Job>()
+
+            for (i in 1..254) {
+                if (!isDiscovering) break
+                val targetIp = "$baseSubnet$i"
+
+                // Check PC Port 9090
+                jobs.add(launch {
+                    if (isPortOpen(targetIp, 9090, 150)) {
+                        val devInfo = DeviceInfo(
+                            id = "$targetIp:9090",
+                            name = "Windows PC ($targetIp)",
+                            host = targetIp,
+                            port = 9090,
+                            protocol = "PC Remote",
+                            deviceType = DeviceType.WINDOWS_PC
+                        )
+                        synchronized(devicesLock) {
+                            if (discoveredDevices.none { it.host == targetIp && it.port == 9090 }) {
+                                discoveredDevices.add(devInfo)
+                            }
+                        }
+                        handler.post { discoveryListener?.invoke(getDiscoveredDevices()) }
+                    }
+                })
+
+                // Check Android TV Port 6466
+                jobs.add(launch {
+                    if (isPortOpen(targetIp, 6466, 150)) {
+                        val devInfo = DeviceInfo(
+                            id = "$targetIp:6466",
+                            name = "Android TV ($targetIp)",
+                            host = targetIp,
+                            port = 6466,
+                            protocol = "ATRPv2",
+                            deviceType = DeviceType.ANDROID_TV
+                        )
+                        synchronized(devicesLock) {
+                            if (discoveredDevices.none { it.host == targetIp && it.port == 6466 }) {
+                                discoveredDevices.add(devInfo)
+                            }
+                        }
+                        handler.post { discoveryListener?.invoke(getDiscoveredDevices()) }
+                    }
+                })
+            }
+            jobs.joinAll()
+        }
+    }
+
+    private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean {
+        return try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(host, port), timeoutMs)
+            socket.close()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun getLocalSubnetPrefix(): String {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val iface = interfaces.nextElement()
+                if (iface.isUp && !iface.isLoopback) {
+                    val addrs = iface.inetAddresses
+                    while (addrs.hasMoreElements()) {
+                        val addr = addrs.nextElement()
+                        if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                            val host = addr.hostAddress ?: continue
+                            if (host.startsWith("192.") || host.startsWith("10.") || host.startsWith("172.")) {
+                                val lastDot = host.lastIndexOf('.')
+                                if (lastDot > 0) {
+                                    val prefix = host.substring(0, lastDot + 1)
+                                    Log.i("TvDiscovery", "Detected active network interface ${iface.name} IP $host -> Subnet prefix: $prefix")
+                                    return prefix
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("TvDiscovery", "Error finding active NetworkInterface: ${e.message}")
+        }
+        return "192.168.1."
     }
 
     private fun sendLanUdpBroadcastPing() {
@@ -84,11 +184,6 @@ class TvDiscoveryManager(private val context: Context) {
 
                 val pingMsg = "{\"cmd\":\"ping\"}\n".toByteArray(Charsets.UTF_8)
                 val addresses = mutableListOf(InetAddress.getByName("255.255.255.255"))
-                getSubnetBroadcastAddress()?.let { subnetBroadcast ->
-                    if (addresses.none { it.hostAddress == subnetBroadcast.hostAddress }) {
-                        addresses.add(subnetBroadcast)
-                    }
-                }
 
                 for (address in addresses) {
                     try {
@@ -140,25 +235,6 @@ class TvDiscoveryManager(private val context: Context) {
                 Log.w("TvDiscovery", "UDP broadcast discovery error: ${e.message}")
             }
         }
-    }
-
-
-    @Suppress("DEPRECATION")
-    private fun getSubnetBroadcastAddress(): InetAddress? {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
-            ?: return null
-        val dhcp = wifiManager.dhcpInfo ?: return null
-        val ip = dhcp.ipAddress
-        val netmask = dhcp.netmask
-        if (ip == 0 || netmask == 0) return null
-        val broadcast = ip or netmask.inv()
-        val bytes = byteArrayOf(
-            (broadcast and 0xff).toByte(),
-            ((broadcast shr 8) and 0xff).toByte(),
-            ((broadcast shr 16) and 0xff).toByte(),
-            ((broadcast shr 24) and 0xff).toByte()
-        )
-        return runCatching { InetAddress.getByAddress(bytes) }.getOrNull()
     }
 
     fun stopDiscovery() {

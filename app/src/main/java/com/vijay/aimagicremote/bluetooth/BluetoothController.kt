@@ -10,6 +10,9 @@ import android.hardware.SensorManager
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlin.math.abs
+import kotlin.math.asin
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -62,7 +65,7 @@ class OneEuroFilter(
  * Smart 3D Gravity-Compensated Air Mouse with Continuous Dynamic Auto-Calibration
  * Features:
  * - 2-Second Neutral Pose Calibration Wizard with Stability Validation
- * - Rotation Vector + Gyroscope 3D Sensor Fusion
+ * - Rotation Vector + Gyroscope 3D Sensor Fusion (AimMac & LG Magic Remote math)
  * - Adaptive Motion Deadzone Gate & Delta Clamping
  */
 class BluetoothController(private val context: Context) : SensorEventListener {
@@ -88,22 +91,27 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     private val rotationMatrix = FloatArray(9)
     private var hasRotationMatrix = false
 
+    // Gyroscope Biases
+    @Volatile
+    private var gyroBiasX: Float = 0f
+    @Volatile
+    private var gyroBiasY: Float = 0f
+    @Volatile
+    private var gyroBiasZ: Float = 0f
+
+    // Stillness Detection EMA
+    private var stillnessEma: Float = 0f
+
     // Aim direction from the device's own frame to the screen
-    // Elevation: how far +Y points above horizon (0 = flat, +90 = pointing up)
     @Volatile
     private var aimElevation: Float = 0f
     @Volatile
     private var lastElevationTimestamp: Long = 0
 
-    // Azimuth: rotation around vertical axis (left/right)
     @Volatile
     private var aimAzimuth: Float = 0f
     @Volatile
     private var lastAzimuthTimestamp: Long = 0
-
-    // Deadzone for idle stabilization
-    @Volatile
-    private var deadzone: Float = 0.032f
 
     // Calibration: recent motion samples to compute bias
     @Volatile
@@ -113,8 +121,6 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     private var isCalibratingWizard: Boolean = false
 
     private val controllerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-    var pointerUpdateListener: ((dx: Float, dy: Float) -> Unit)? = null
 
     var pointerUpdateListener: ((dx: Float, dy: Float) -> Unit)? = null
 
@@ -134,6 +140,7 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         gyroBiasX = 0f
         gyroBiasY = 0f
         gyroBiasZ = 0f
+        stillnessEma = 0f
         filterX.reset()
         filterY.reset()
         Log.i("BluetoothController", "Gyroscope center reset")
@@ -157,7 +164,7 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             if (!wasActive) {
                 sensorManager?.registerListener(
                     this@BluetoothController,
-                    rotationVectorSensor ?: gyroscopeSensor,
+                    gyroscopeSensor,
                     SensorManager.SENSOR_DELAY_GAME
                 )
             }
@@ -170,12 +177,10 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             }
 
             if (calibrationSamples.size > 20) {
-                // Compute mean from samples
                 val meanX = calibrationSamples.map { it[0] }.average().toFloat()
                 val meanY = calibrationSamples.map { it[1] }.average().toFloat()
                 val meanZ = calibrationSamples.map { it[2] }.average().toFloat()
 
-                // Check if phone stayed still (low variance)
                 val varianceX = calibrationSamples.map { (it[0] - meanX) * (it[0] - meanX) }.average().toFloat()
                 val varianceY = calibrationSamples.map { (it[1] - meanY) * (it[1] - meanY) }.average().toFloat()
                 val varianceZ = calibrationSamples.map { (it[2] - meanZ) * (it[2] - meanZ) }.average().toFloat()
@@ -190,7 +195,7 @@ class BluetoothController(private val context: Context) : SensorEventListener {
 
                     Log.i("BluetoothController", "Calibration successful! Variance: $totalVariance")
                     withContext(Dispatchers.Main) {
-                        onResult(true, "Calibration successful!")
+                        onResult(true, "Calibration successful! Neutral pose saved.")
                     }
                 } else {
                     Log.w("BluetoothController", "Calibration failed: phone moved during calibration (Variance: $totalVariance)")
@@ -261,48 +266,56 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             }
 
             Sensor.TYPE_GYROSCOPE -> {
-                // Gyro bias correction during calibration
+                val rawGyroX = event.values[0] // pitch
+                val rawGyroY = event.values[1] // roll
+                val rawGyroZ = event.values[2] // yaw
+
                 if (isCalibratingWizard) {
-                    calibrationSamples.add(floatArrayOf(event.values[0], event.values[1], event.values[2]))
+                    calibrationSamples.add(floatArrayOf(rawGyroX, rawGyroY, rawGyroZ))
                     return
                 }
 
                 if (!isAirMouseActive) return
 
-                updateAimFromRotationVector(event.values, event.timestamp)
+                val timestamp = event.timestamp
+                val motionMag = sqrt(rawGyroX * rawGyroX + rawGyroY * rawGyroY + rawGyroZ * rawGyroZ)
+
+                stillnessEma = 0.90f * stillnessEma + 0.10f * motionMag
+
+                if (motionMag < 0.045f && stillnessEma < 0.045f) {
+                    val alpha = 0.08f
+                    gyroBiasX = (1 - alpha) * gyroBiasX + alpha * rawGyroX
+                    gyroBiasY = (1 - alpha) * gyroBiasY + alpha * rawGyroY
+                    gyroBiasZ = (1 - alpha) * gyroBiasZ + alpha * rawGyroZ
+                    return
+                }
+
+                val cleanX = rawGyroX - gyroBiasX
+                val cleanY = rawGyroY - gyroBiasY
+                val cleanZ = rawGyroZ - gyroBiasZ
+
+                val deadzone = 0.032f
+                var deltaX = if (abs(cleanZ) > deadzone) -cleanZ else 0f
+                var deltaY = if (abs(cleanX) > deadzone) -cleanX else 0f
+
+                if (hasRotationMatrix) {
+                    val projX = -(cleanZ * rotationMatrix[8] + cleanY * rotationMatrix[5] + cleanX * rotationMatrix[2])
+                    val projY = -(cleanX * rotationMatrix[0] + cleanY * rotationMatrix[3] + cleanZ * rotationMatrix[6])
+
+                    deltaX = if (abs(projX) > deadzone) projX else 0f
+                    deltaY = if (abs(projY) > deadzone) projY else 0f
+                }
+
+                val smoothDx = filterX.filter(deltaX, timestamp)
+                val smoothDy = filterY.filter(deltaY, timestamp)
+
+                val scaledDx = (smoothDx * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
+                val scaledDy = (smoothDy * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
+
+                if (abs(scaledDx) > 0.1f || abs(scaledDy) > 0.1f) {
+                    pointerUpdateListener?.invoke(scaledDx, scaledDy)
+                }
             }
         }
-    }
-
-    /**
-     * AimMac-style motion processing:
-     * - Elevation (up/down): gravity's Y component relative to horizon
-     * - Azimuth (left/right): gyro rate around the up axis
-     */
-    private fun updateAimFromRotationVector(values: FloatArray, timestamp: Long) {
-        val g = floatArrayOf(values[0], values[1], values[2])
-        val gn = sqrt(g[0]*g[0] + g[1]*g[1] + g[2]*g[2])
-        if (gn < 0.1f) return
-
-        val gx = g[0] / gn
-        val gy = g[1] / gn
-        val gz = g[2] / gn
-
-        // Elevation: angle of top edge above horizon
-        aimElevation = asin(max(-1f, min(1f, -gy))) * 180 / Math.PI.toFloat()
-        lastElevationTimestamp = timestamp
-
-        // Azimuth: update based on rotation rate
-        val dt = if (lastAzimuthTimestamp != 0L) {
-            min(max(timestamp - lastAzimuthTimestamp, 0L), 50_000_000L).toFloat() / 1_000_000_000f
-        } else {
-            0f
-        }
-        if (dt > 0.001f && hasRotationMatrix) {
-            val w = values[0]
-            aimAzimuth += w * dt * 180 / Math.PI.toFloat()
-            aimAzimuth %= 360.0
-        }
-        lastAzimuthTimestamp = timestamp
     }
 }

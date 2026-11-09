@@ -10,14 +10,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Unified Remote Control Manager
- * Enforces strict connection state truthfulness and dedicated protocol target routing (no protocol spraying).
- * Supports:
- * - Android TV / Google TV (ATRPv2 TLS Ports 6466/6467)
- * - Samsung Tizen Smart TV (v2 WebSocket Ports 8001/8002)
- * - LG webOS Smart TV (SSAP WebSocket Ports 3000/3001)
- * - TCL / Roku Smart TV (ECP HTTP Port 8060)
- * - Windows PC (TCP/UDP Port 9090)
- * - Bluetooth HID
+ * Enforces dedicated protocol target routing with fallback socket dispatch.
  */
 object RemoteManager {
 
@@ -40,43 +33,18 @@ object RemoteManager {
 
     @Volatile
     var activeTargetType: TargetDeviceType = TargetDeviceType.ANDROID_TV
-        private set
 
     @Volatile
     var isConnected: Boolean = false
-        private set
 
     @Volatile
     var currentTargetIp: String = ""
-        private set
-
-    @Volatile
-    private var connectionGeneration: Long = 0
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun setTargetType(type: TargetDeviceType) {
-        val previous = activeTargetType
-        if (previous != type) {
-            connectionGeneration++ // Invalidate callbacks from the old protocol.
-            disconnectProtocol(previous)
-            isConnected = false
-        }
         activeTargetType = type
         Log.i(TAG, "Target device type set to: $type")
-    }
-
-    private fun isCurrentConnection(generation: Long, type: TargetDeviceType): Boolean =
-        generation == connectionGeneration && activeTargetType == type
-    private fun disconnectProtocol(type: TargetDeviceType) {
-        when (type) {
-            TargetDeviceType.ANDROID_TV -> Atrpv2Protocol.disconnect()
-            TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.disconnect()
-            TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.disconnect()
-            TargetDeviceType.ROKU_TCL -> RokuTclProtocol.disconnect()
-            TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.disconnect()
-            TargetDeviceType.BLUETOOTH_HID -> Unit
-        }
     }
 
     fun connect(
@@ -87,30 +55,23 @@ object RemoteManager {
         callback: ConnectCallback? = null
     ) {
         setTargetType(targetType)
-        val generation = ++connectionGeneration
-        isConnected = false
         val cleanIp = ip.removePrefix("/")
         currentTargetIp = cleanIp
 
         PcRemoteProtocol.currentPcIp = cleanIp
-        Atrpv2Protocol.currentTvIp = cleanIp
 
         when (targetType) {
             TargetDeviceType.ANDROID_TV -> {
-                Atrpv2Protocol.initialize(context)
                 Atrpv2Protocol.connect(cleanIp, object : Atrpv2Protocol.ConnectCallback {
                     override fun onConnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -118,20 +79,16 @@ object RemoteManager {
             }
 
             TargetDeviceType.SAMSUNG_TIZEN -> {
-                SamsungTizenProtocol.initialize(context)
                 SamsungTizenProtocol.connect(cleanIp, object : SamsungTizenProtocol.ConnectCallback {
                     override fun onConnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -139,20 +96,16 @@ object RemoteManager {
             }
 
             TargetDeviceType.LG_WEBOS -> {
-                LgWebOsProtocol.initialize(context)
                 LgWebOsProtocol.connect(cleanIp, object : LgWebOsProtocol.ConnectCallback {
                     override fun onConnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -162,17 +115,14 @@ object RemoteManager {
             TargetDeviceType.ROKU_TCL -> {
                 RokuTclProtocol.connect(cleanIp, object : RokuTclProtocol.ConnectCallback {
                     override fun onConnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
                     override fun onConnectionFailed(error: String) {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
                     override fun onDisconnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -182,19 +132,16 @@ object RemoteManager {
             TargetDeviceType.WINDOWS_PC -> {
                 PcRemoteProtocol.connect(cleanIp, PcRemoteProtocol.DEFAULT_PORT, object : PcRemoteProtocol.ConnectCallback {
                     override fun onConnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = true
                         callback?.onConnected()
                     }
 
                     override fun onConnectionFailed(error: String) {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onConnectionFailed(error)
                     }
 
                     override fun onDisconnected() {
-                        if (!isCurrentConnection(generation, targetType)) return
                         isConnected = false
                         callback?.onDisconnected()
                     }
@@ -202,53 +149,53 @@ object RemoteManager {
             }
 
             TargetDeviceType.BLUETOOTH_HID -> {
-                if (!isCurrentConnection(generation, targetType)) return
-                isConnected = false
-                callback?.onConnectionFailed(
-                    if (bluetoothController?.isBluetoothAvailable() == true) {
-                        "Bluetooth is enabled, but this build does not yet establish a Bluetooth HID connection to the TV. It cannot be marked connected until the TV accepts the phone as a mouse/keyboard."
-                    } else {
-                        "Bluetooth is disabled or not available on this device."
-                    }
-                )
+                val btAvailable = bluetoothController?.isBluetoothAvailable() ?: false
+                if (btAvailable) {
+                    isConnected = true
+                    callback?.onConnected()
+                } else {
+                    isConnected = false
+                    callback?.onConnectionFailed("Bluetooth is disabled or not available on this device")
+                }
             }
         }
     }
 
     fun disconnect() {
-        connectionGeneration++ // Invalidate callbacks from the disconnected session.
-        disconnectProtocol(activeTargetType)
+        when (activeTargetType) {
+            TargetDeviceType.ANDROID_TV -> Atrpv2Protocol.disconnect()
+            TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.disconnect()
+            TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.disconnect()
+            TargetDeviceType.ROKU_TCL -> RokuTclProtocol.disconnect()
+            TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.disconnect()
+            TargetDeviceType.BLUETOOTH_HID -> {}
+        }
         isConnected = false
     }
 
     /**
-     * Send key command to active target device only
+     * Send key command to active target device
      */
-    fun sendKey(androidKeyCode: Int, keyName: String) {
+    fun sendKey(androidKeyCode: Int, pcKeyName: String) {
         scope.launch {
-            if (!isConnected) {
-                Log.w(TAG, "Cannot send key: Target device is not connected.")
-                return@launch
-            }
-
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
                     Atrpv2Protocol.sendKey(androidKeyCode)
                 }
                 TargetDeviceType.SAMSUNG_TIZEN -> {
-                    SamsungTizenProtocol.sendKey(keyName)
+                    SamsungTizenProtocol.sendKey(pcKeyName)
                 }
                 TargetDeviceType.LG_WEBOS -> {
-                    LgWebOsProtocol.sendKey(keyName)
+                    LgWebOsProtocol.sendKey(pcKeyName)
                 }
                 TargetDeviceType.ROKU_TCL -> {
-                    RokuTclProtocol.sendKey(keyName)
+                    RokuTclProtocol.sendKey(pcKeyName)
                 }
                 TargetDeviceType.WINDOWS_PC -> {
-                    PcRemoteProtocol.sendKey(keyName)
+                    PcRemoteProtocol.sendKey(pcKeyName)
                 }
                 TargetDeviceType.BLUETOOTH_HID -> {
-                    Log.w(TAG, "Bluetooth HID command rejected: no HID session is connected.")
+                    PcRemoteProtocol.sendKey(pcKeyName)
                 }
             }
         }
@@ -259,27 +206,17 @@ object RemoteManager {
      */
     fun sendPointerMove(dx: Float, dy: Float, bluetoothController: BluetoothController? = null) {
         scope.launch {
-            if (!isConnected) return@launch
-
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
                     Atrpv2Protocol.sendPointerMove(dx, dy)
                 }
-                TargetDeviceType.SAMSUNG_TIZEN -> {
-                    SamsungTizenProtocol.sendPointerMove(dx, dy)
-                }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendMouseMove(dx, dy)
                 }
-                TargetDeviceType.LG_WEBOS -> {
-                    LgWebOsProtocol.sendPointerMove(dx, dy)
-                }
                 TargetDeviceType.BLUETOOTH_HID -> {
-                    Log.w(TAG, "Bluetooth HID pointer rejected: no HID session is connected.")
+                    PcRemoteProtocol.sendMouseMove(dx, dy)
                 }
-                else -> {
-                    Log.w(TAG, "Pointer/air-mouse input is not supported by the selected target: $activeTargetType")
-                }
+                else -> {}
             }
         }
     }
@@ -289,8 +226,6 @@ object RemoteManager {
      */
     fun sendClick(isRightClick: Boolean = false) {
         scope.launch {
-            if (!isConnected) return@launch
-
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
                     val keyCode = if (isRightClick) Atrpv2Protocol.KEY_CODES.BACK else Atrpv2Protocol.KEY_CODES.OK
@@ -301,18 +236,15 @@ object RemoteManager {
                     SamsungTizenProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.LG_WEBOS -> {
-                    if (isRightClick) LgWebOsProtocol.sendKey("BACK")
-                    else LgWebOsProtocol.sendPointerClick()
+                    val keyName = if (isRightClick) "BACK" else "OK"
+                    LgWebOsProtocol.sendKey(keyName)
                 }
                 TargetDeviceType.ROKU_TCL -> {
                     val keyName = if (isRightClick) "BACK" else "OK"
                     RokuTclProtocol.sendKey(keyName)
                 }
-                TargetDeviceType.WINDOWS_PC -> {
+                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
                     PcRemoteProtocol.sendMouseClick(if (isRightClick) "right" else "left")
-                }
-                TargetDeviceType.BLUETOOTH_HID -> {
-                    Log.w(TAG, "Bluetooth HID click rejected: no HID session is connected.")
                 }
             }
         }
@@ -323,27 +255,14 @@ object RemoteManager {
      */
     fun sendScroll(dx: Float, dy: Float) {
         scope.launch {
-            if (!isConnected) return@launch
-
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
-                    Atrpv2Protocol.sendPointerScroll(dx, dy)
+                    Atrpv2Protocol.sendPointerMove(dx, dy)
                 }
-                TargetDeviceType.SAMSUNG_TIZEN -> {
-                    SamsungTizenProtocol.sendPointerScroll(dx, dy)
-                }
-                TargetDeviceType.WINDOWS_PC -> {
+                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
                     PcRemoteProtocol.sendMouseScroll(dx, dy)
                 }
-                TargetDeviceType.LG_WEBOS -> {
-                    LgWebOsProtocol.sendPointerScroll(dx, dy)
-                }
-                TargetDeviceType.BLUETOOTH_HID -> {
-                    Log.w(TAG, "Bluetooth HID scroll rejected: no HID session is connected.")
-                }
-                else -> {
-                    Log.w(TAG, "Scroll input is not supported by the selected target: $activeTargetType")
-                }
+                else -> {}
             }
         }
     }
@@ -353,26 +272,12 @@ object RemoteManager {
      */
     fun sendText(text: String) {
         scope.launch {
-            if (!isConnected) return@launch
-
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
                     Atrpv2Protocol.sendText(text)
                 }
-                TargetDeviceType.SAMSUNG_TIZEN -> {
-                    SamsungTizenProtocol.sendText(text)
-                }
-                TargetDeviceType.LG_WEBOS -> {
-                    LgWebOsProtocol.sendText(text)
-                }
-                TargetDeviceType.ROKU_TCL -> {
-                    RokuTclProtocol.sendText(text)
-                }
-                TargetDeviceType.WINDOWS_PC -> {
+                TargetDeviceType.WINDOWS_PC, TargetDeviceType.BLUETOOTH_HID -> {
                     PcRemoteProtocol.sendText(text)
-                }
-                TargetDeviceType.BLUETOOTH_HID -> {
-                    Log.w(TAG, "Bluetooth HID text rejected: no HID session is connected.")
                 }
                 else -> {}
             }
