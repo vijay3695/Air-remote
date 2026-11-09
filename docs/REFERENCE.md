@@ -2,7 +2,7 @@
 
 ## Research Summary (2026-11-08)
 
-### Primary Open Source Projects (All MIT/Apache Licensed ✅)
+### Primary Open Source Projects (license must be verified per repository and component)
 
 | Project | License | Key Reusable Code |
 |---------|---------|------------------|
@@ -28,6 +28,16 @@
 |---------|-------------|
 | **KDE Connect MousePad** (`invent.kde.org/network/kdeconnect-android`) | Gyroscope-controlled mouse pointer ("MousePad" feature), inspired by LG TV magic remote |
 | **AimMac** (again) | Gyroscope+gravity mapping, 1€ filter, Bluetooth pointer - math reusable even though BT-only |
+
+## Implementation status update (2026-11-09)
+
+- The current app has a new Android TV Remote v2 implementation in `Atrpv2Protocol.kt` and a bounded protobuf wire codec in `AtvWire.kt`. The codec is adapted from OpenTV-Remote's MIT-licensed `Wire.kt`; attribution is in `docs/THIRD_PARTY_NOTICES.md`.
+- No Linkpad, AimMac, BT Remote, or other candidate project's implementation has been copied into Air Remote yet. Those remain research references only.
+- Android TV Remote v2 supports key injection and text/IME messages, but its standard remote-message schema does **not** define a general gyro mouse-pointer injection message. Air Mouse pointer support for Android TV therefore remains a separate companion-app / accessibility / Bluetooth HID investigation; do not mark it as working.
+- LG webOS pointer control uses its separate SSAP pointer socket, not the Android TV protocol.
+- Samsung, LG, Roku, and Android TV code still require real-TV pairing and command tests. A successful build is not evidence of hardware compatibility.
+- Roku ECP applies to Roku OS devices (including Roku-based TCL models), not TCL Android TV/Google TV models.
+- “DLNA” is not a universal TV remote-key protocol. DLNA/UPnP media-renderer support may enable media transport commands on some devices, but it does not guarantee D-pad, power, text, or mouse control. Treat each protocol as a separately verified capability.
 
 ### Android TV Remote Protocol v2 (ATRPv2) - Critical Specs
 
