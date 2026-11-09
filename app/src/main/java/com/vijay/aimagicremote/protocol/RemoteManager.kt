@@ -240,7 +240,9 @@ object RemoteManager {
                 TargetDeviceType.BLUETOOTH_HID -> {
                     Log.w(TAG, "Bluetooth HID pointer rejected: no HID session is connected.")
                 }
-                else -> {}
+                else -> {
+                    Log.w(TAG, "Pointer/air-mouse input is not supported by the selected target: $activeTargetType")
+                }
             }
         }
     }
@@ -299,7 +301,9 @@ object RemoteManager {
                 TargetDeviceType.BLUETOOTH_HID -> {
                     Log.w(TAG, "Bluetooth HID scroll rejected: no HID session is connected.")
                 }
-                else -> {}
+                else -> {
+                    Log.w(TAG, "Scroll input is not supported by the selected target: $activeTargetType")
+                }
             }
         }
     }
