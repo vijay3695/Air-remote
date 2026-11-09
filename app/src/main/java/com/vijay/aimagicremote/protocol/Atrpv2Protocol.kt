@@ -262,7 +262,7 @@ object Atrpv2Protocol {
 
                 // PairingRequest schema: service_name is field 1, client_name is field 2.
                 val request = AtvWire.message(
-                    AtvWire.string(1, "com.github.airremote/androidTvRemote"),
+                    AtvWire.string(1, "atvremote"),
                     AtvWire.string(2, "Air Remote")
                 )
                 sendPairingEnvelope(socket, 10, request) // pairing_request
