@@ -13,8 +13,8 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * 1€ Filter (One Euro Filter) for smoothing gyroscope jitter
- * Tuned with minCutoff = 1.2f, beta = 0.08f for zero motion latency and smooth cursor motion.
+ * 1€ Filter (One Euro Filter) for smoothing gyroscope jitter.
+ * Tuned as in AimMac: minCutoff = 1.2f, beta = 0.08f, dCutoff = 1.0f.
  */
 class OneEuroFilter(
     private var minCutoff: Float = 1.2f,
@@ -75,6 +75,7 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     private val rotationVectorSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
         ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
+    // Motion filters (one per axis) - AimMac 1€ filter tuning
     private val filterX = OneEuroFilter(minCutoff = 1.2f, beta = 0.08f)
     private val filterY = OneEuroFilter(minCutoff = 1.2f, beta = 0.08f)
 
@@ -83,29 +84,37 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     @Volatile
     var pointerSensitivity: Float = 1.5f
 
-    // 3D Rotation Matrix for Gravity Alignment
+    // Rotation matrix for gravity alignment
     private val rotationMatrix = FloatArray(9)
     private var hasRotationMatrix = false
 
-    // Continuous Dynamic Auto-Calibration & Zero Bias Tracking
+    // Aim direction from the device's own frame to the screen
+    // Elevation: how far +Y points above horizon (0 = flat, +90 = pointing up)
     @Volatile
-    private var gyroBiasX: Float = 0f
+    private var aimElevation: Float = 0f
     @Volatile
-    private var gyroBiasY: Float = 0f
-    @Volatile
-    private var gyroBiasZ: Float = 0f
+    private var lastElevationTimestamp: Long = 0
 
-    // Stillness Detection EMA
-    private var stillnessEma: Float = 0f
+    // Azimuth: rotation around vertical axis (left/right)
+    @Volatile
+    private var aimAzimuth: Float = 0f
+    @Volatile
+    private var lastAzimuthTimestamp: Long = 0
 
-    // Calibration Wizard Buffers
+    // Deadzone for idle stabilization
+    @Volatile
+    private var deadzone: Float = 0.032f
+
+    // Calibration: recent motion samples to compute bias
+    @Volatile
+    private var calibrationSamples: MutableList<FloatArray> = mutableListOf()
+
     @Volatile
     private var isCalibratingWizard: Boolean = false
-    private val calibrationSamplesX = mutableListOf<Float>()
-    private val calibrationSamplesY = mutableListOf<Float>()
-    private val calibrationSamplesZ = mutableListOf<Float>()
 
     private val controllerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    var pointerUpdateListener: ((dx: Float, dy: Float) -> Unit)? = null
 
     var pointerUpdateListener: ((dx: Float, dy: Float) -> Unit)? = null
 
@@ -125,14 +134,14 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         gyroBiasX = 0f
         gyroBiasY = 0f
         gyroBiasZ = 0f
-        stillnessEma = 0f
         filterX.reset()
         filterY.reset()
         Log.i("BluetoothController", "Gyroscope center reset")
     }
 
     /**
-     * 2-Second Neutral Pose Calibration Wizard
+     * 2-Second Neutral Pose Calibration Wizard.
+     * Uses recent motion samples to compute gyro bias and validate phone stability.
      */
     fun startNeutralPoseCalibration(onResult: (Boolean, String) -> Unit) {
         if (gyroscopeSensor == null) {
@@ -141,16 +150,14 @@ class BluetoothController(private val context: Context) : SensorEventListener {
         }
 
         controllerScope.launch {
-            calibrationSamplesX.clear()
-            calibrationSamplesY.clear()
-            calibrationSamplesZ.clear()
+            calibrationSamples.clear()
             isCalibratingWizard = true
 
             val wasActive = isAirMouseActive
             if (!wasActive) {
                 sensorManager?.registerListener(
                     this@BluetoothController,
-                    gyroscopeSensor,
+                    rotationVectorSensor ?: gyroscopeSensor,
                     SensorManager.SENSOR_DELAY_GAME
                 )
             }
@@ -162,63 +169,69 @@ class BluetoothController(private val context: Context) : SensorEventListener {
                 sensorManager?.unregisterListener(this@BluetoothController)
             }
 
-            if (calibrationSamplesX.size > 20) {
-                val meanX = calibrationSamplesX.average().toFloat()
-                val meanY = calibrationSamplesY.average().toFloat()
-                val meanZ = calibrationSamplesZ.average().toFloat()
+            if (calibrationSamples.size > 20) {
+                // Compute mean from samples
+                val meanX = calibrationSamples.map { it[0] }.average().toFloat()
+                val meanY = calibrationSamples.map { it[1] }.average().toFloat()
+                val meanZ = calibrationSamples.map { it[2] }.average().toFloat()
 
-                // Calculate variance to check if phone was held steady
-                val varianceX = calibrationSamplesX.map { (it - meanX) * (it - meanX) }.average().toFloat()
-                val varianceY = calibrationSamplesY.map { (it - meanY) * (it - meanY) }.average().toFloat()
-                val varianceZ = calibrationSamplesZ.map { (it - meanZ) * (it - meanZ) }.average().toFloat()
+                // Check if phone stayed still (low variance)
+                val varianceX = calibrationSamples.map { (it[0] - meanX) * (it[0] - meanX) }.average().toFloat()
+                val varianceY = calibrationSamples.map { (it[1] - meanY) * (it[1] - meanY) }.average().toFloat()
+                val varianceZ = calibrationSamples.map { (it[2] - meanZ) * (it[2] - meanZ) }.average().toFloat()
                 val totalVariance = sqrt(varianceX + varianceY + varianceZ)
 
-                if (totalVariance < 0.15f) {
+                if (totalVariance < 0.25f) {
                     gyroBiasX = meanX
                     gyroBiasY = meanY
                     gyroBiasZ = meanZ
                     filterX.reset()
                     filterY.reset()
 
-                    Log.i("BluetoothController", "Calibration successful! Variance: $totalVariance, Biases: X=$meanX, Y=$meanY, Z=$meanZ")
+                    Log.i("BluetoothController", "Calibration successful! Variance: $totalVariance")
                     withContext(Dispatchers.Main) {
-                        onResult(true, "Calibration successful! Variance: %.3f. Neutral pose set.".format(totalVariance))
+                        onResult(true, "Calibration successful!")
                     }
                 } else {
-                    Log.w("BluetoothController", "Calibration failed due to phone motion. Variance: $totalVariance")
+                    Log.w("BluetoothController", "Calibration failed: phone moved during calibration (Variance: $totalVariance)")
                     withContext(Dispatchers.Main) {
-                        onResult(false, "Phone moved during calibration (Variance: %.2f). Hold steady and try again.".format(totalVariance))
+                        onResult(false, "Phone moved during calibration. Hold steady and try again.")
                     }
                 }
             } else {
                 withContext(Dispatchers.Main) {
-                    onResult(false, "Not enough sensor samples collected. Try again.")
+                    onResult(false, "Not enough samples. Try again.")
                 }
             }
         }
     }
 
+    /**
+     * Start the air mouse with AimMac-style gravity-based motion processing.
+     */
     fun startAirMouse(): Boolean {
         if (isAirMouseActive) return true
 
-        if (gyroscopeSensor == null) {
-            Log.w("BluetoothController", "Gyroscope sensor not available on this device!")
+        if (gyroscopeSensor == null && rotationVectorSensor == null) {
+            Log.w("BluetoothController", "No motion sensor available on this device!")
             return false
         }
 
-        val regGyro = sensorManager?.registerListener(
-            this,
-            gyroscopeSensor,
-            SensorManager.SENSOR_DELAY_GAME
-        ) ?: false
-
-        rotationVectorSensor?.let {
-            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        val regGyro = if (gyroscopeSensor != null) {
+            sensorManager?.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_GAME) ?: false
+        } else {
+            false
         }
 
-        isAirMouseActive = regGyro
-        Log.i("BluetoothController", "3D Smart Auto-Calibrating Air Mouse started (Registered: $regGyro)")
-        return regGyro
+        val regRVec = if (rotationVectorSensor != null) {
+            sensorManager?.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME) ?: false
+        } else {
+            false
+        }
+
+        isAirMouseActive = regGyro || regRVec
+        Log.i("BluetoothController", "Air Mouse started (Gyro: $regGyro, RotationVector: $regRVec)")
+        return regGyro || regRVec
     }
 
     fun stopAirMouse() {
@@ -248,58 +261,48 @@ class BluetoothController(private val context: Context) : SensorEventListener {
             }
 
             Sensor.TYPE_GYROSCOPE -> {
-                val rawGyroX = event.values[0] // pitch
-                val rawGyroY = event.values[1] // roll
-                val rawGyroZ = event.values[2] // yaw
-
+                // Gyro bias correction during calibration
                 if (isCalibratingWizard) {
-                    calibrationSamplesX.add(rawGyroX)
-                    calibrationSamplesY.add(rawGyroY)
-                    calibrationSamplesZ.add(rawGyroZ)
+                    calibrationSamples.add(floatArrayOf(event.values[0], event.values[1], event.values[2]))
                     return
                 }
 
                 if (!isAirMouseActive) return
 
-                val timestamp = event.timestamp
-                val motionMag = sqrt(rawGyroX * rawGyroX + rawGyroY * rawGyroY + rawGyroZ * rawGyroZ)
-
-                stillnessEma = 0.90f * stillnessEma + 0.10f * motionMag
-
-                if (motionMag < 0.045f && stillnessEma < 0.045f) {
-                    val alpha = 0.08f
-                    gyroBiasX = (1 - alpha) * gyroBiasX + alpha * rawGyroX
-                    gyroBiasY = (1 - alpha) * gyroBiasY + alpha * rawGyroY
-                    gyroBiasZ = (1 - alpha) * gyroBiasZ + alpha * rawGyroZ
-                    return
-                }
-
-                val cleanX = rawGyroX - gyroBiasX
-                val cleanY = rawGyroY - gyroBiasY
-                val cleanZ = rawGyroZ - gyroBiasZ
-
-                val deadzone = 0.032f
-                var deltaX = if (abs(cleanZ) > deadzone) -cleanZ else 0f
-                var deltaY = if (abs(cleanX) > deadzone) -cleanX else 0f
-
-                if (hasRotationMatrix) {
-                    val projX = -(cleanZ * rotationMatrix[8] + cleanY * rotationMatrix[5] + cleanX * rotationMatrix[2])
-                    val projY = -(cleanX * rotationMatrix[0] + cleanY * rotationMatrix[3] + cleanZ * rotationMatrix[6])
-
-                    deltaX = if (abs(projX) > deadzone) projX else 0f
-                    deltaY = if (abs(projY) > deadzone) projY else 0f
-                }
-
-                val smoothDx = filterX.filter(deltaX, timestamp)
-                val smoothDy = filterY.filter(deltaY, timestamp)
-
-                val scaledDx = (smoothDx * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
-                val scaledDy = (smoothDy * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
-
-                if (abs(scaledDx) > 0.1f || abs(scaledDy) > 0.1f) {
-                    pointerUpdateListener?.invoke(scaledDx, scaledDy)
-                }
+                updateAimFromRotationVector(event.values, event.timestamp)
             }
         }
+    }
+
+    /**
+     * AimMac-style motion processing:
+     * - Elevation (up/down): gravity's Y component relative to horizon
+     * - Azimuth (left/right): gyro rate around the up axis
+     */
+    private fun updateAimFromRotationVector(values: FloatArray, timestamp: Long) {
+        val g = floatArrayOf(values[0], values[1], values[2])
+        val gn = sqrt(g[0]*g[0] + g[1]*g[1] + g[2]*g[2])
+        if (gn < 0.1f) return
+
+        val gx = g[0] / gn
+        val gy = g[1] / gn
+        val gz = g[2] / gn
+
+        // Elevation: angle of top edge above horizon
+        aimElevation = asin(max(-1f, min(1f, -gy))) * 180 / Math.PI.toFloat()
+        lastElevationTimestamp = timestamp
+
+        // Azimuth: update based on rotation rate
+        val dt = if (lastAzimuthTimestamp != 0L) {
+            min(max(timestamp - lastAzimuthTimestamp, 0L), 50_000_000L).toFloat() / 1_000_000_000f
+        } else {
+            0f
+        }
+        if (dt > 0.001f && hasRotationMatrix) {
+            val w = values[0]
+            aimAzimuth += w * dt * 180 / Math.PI.toFloat()
+            aimAzimuth %= 360.0
+        }
+        lastAzimuthTimestamp = timestamp
     }
 }
