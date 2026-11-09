@@ -4,6 +4,12 @@
 
 ---
 
+## Documentation
+
+Project plans, design notes, protocol references, and the current issue/repair report are in the [docs folder](docs/README.md).
+
+---
+
 ## 🚀 Key Features & Architecture
 
 - **iOS 18 Dark Glassmorphism UI**: Header status pill badge (`● Connected`), 3 target device modes, 3 mode tabs, and a 3x4 D-pad remote button grid.
