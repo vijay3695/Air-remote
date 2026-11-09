@@ -304,9 +304,7 @@ object RemoteManager {
 
             when (activeTargetType) {
                 TargetDeviceType.ANDROID_TV -> {
-                    for (char in text) {
-                        Atrpv2Protocol.sendKey(char.code)
-                    }
+                    Atrpv2Protocol.sendText(text)
                 }
                 TargetDeviceType.WINDOWS_PC -> {
                     PcRemoteProtocol.sendText(text)
