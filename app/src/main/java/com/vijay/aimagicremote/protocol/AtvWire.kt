@@ -60,7 +60,7 @@ internal object AtvWire {
                 0 -> fields += Field(tag ushr 3, readVarint(input))
                 2 -> {
                     val size = readVarint(input)
-                    require(size in 0..1_048_576 && size <= input.available().toLong()) {
+                    require(size >= 0L && size <= 1_048_576L && size <= input.available().toLong()) {
                         "Invalid protobuf field size"
                     }
                     val value = ByteArray(size.toInt())
@@ -79,7 +79,7 @@ internal object AtvWire {
 
     fun readFrame(input: InputStream): ByteArray {
         val size = readVarint(input)
-        require(size in 1..1_048_576) { "Invalid protobuf frame length: $size" }
+        require(size >= 1L && size <= 1_048_576L) { "Invalid protobuf frame length: $size" }
         val data = ByteArray(size.toInt())
         var offset = 0
         while (offset < data.size) {
