@@ -228,13 +228,8 @@ object Atrpv2Protocol {
         AtvWire.writeFrame(socket.outputStream, AtvWire.bytes(payloadField, payload))
     }
 
-    private fun readRemoteMessage(socket: SSLSocket): List<AtvWire.Field> {
-        val fields = AtvWire.parse(AtvWire.readFrame(socket.inputStream))
-        if (fields.any { it.number == 3 }) {
-            throw IOException("Android TV reported a RemoteError.")
-        }
-        return fields
-    }
+    private fun readRemoteMessage(socket: SSLSocket): List<AtvWire.Field> =
+        AtvWire.parse(AtvWire.readFrame(socket.inputStream))
 
     private fun expectPayload(socket: SSLSocket, expectedField: Int, step: String) {
         val response = readPairingEnvelope(socket)
@@ -466,6 +461,9 @@ object Atrpv2Protocol {
                                         sendRemoteMessage(socket, 9, AtvWire.message(AtvWire.int(1, pingId)))
                                     }
                                 }
+                            }
+                            if (message.any { it.number == 3 }) {
+                                Log.w(TAG, "Android TV rejected a remote command (RemoteError).")
                             }
                         }
                     } catch (e: Exception) {
