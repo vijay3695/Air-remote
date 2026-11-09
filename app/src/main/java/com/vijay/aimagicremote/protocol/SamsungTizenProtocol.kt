@@ -11,6 +11,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.cert.CertificateException
