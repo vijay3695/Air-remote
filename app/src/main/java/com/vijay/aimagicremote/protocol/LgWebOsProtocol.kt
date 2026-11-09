@@ -298,6 +298,21 @@ object LgWebOsProtocol {
         isConnected = false
     }
 
+    fun sendPointerMove(dx: Float, dy: Float, down: Int = 0) {
+        if (!isConnected) return
+        pointerWebSocket?.send("type:move\\ndx:$dx\\ndy:$dy\\ndown:$down\\n\\n")
+    }
+
+    fun sendPointerClick() {
+        if (!isConnected) return
+        pointerWebSocket?.send("type:click\\n\\n")
+    }
+
+    fun sendPointerScroll(dx: Float, dy: Float) {
+        if (!isConnected) return
+        pointerWebSocket?.send("type:scroll\\ndx:$dx\\ndy:$dy\\n\\n")
+    }
+
     fun sendKey(keyName: String) {
         val key = keyName.uppercase()
         val pointerName = when (key) {
