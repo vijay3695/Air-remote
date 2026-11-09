@@ -43,8 +43,7 @@ object PcRemoteProtocol {
     private var tcpSocket: Socket? = null
     private var tcpOutputStream: OutputStream? = null
     private var udpSocket: DatagramSocket? = null
-    @Volatile
-    private var currentPort: Int = DEFAULT_PORT
+    @Volatile private var connectionCallback: ConnectCallback? = null
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -61,7 +60,7 @@ object PcRemoteProtocol {
     fun connect(ip: String, port: Int = DEFAULT_PORT, callback: ConnectCallback? = null) {
         val cleanIp = ip.removePrefix("/")
         currentPcIp = cleanIp
-        currentPort = port
+        connectionCallback = callback
 
         scope.launch {
             transportMutex.withLock {
@@ -198,6 +197,9 @@ object PcRemoteProtocol {
                     }
                     tcpOutputStream = null
                     tcpSocket = null
+                    scope.launch(Dispatchers.Main) {
+                        connectionCallback?.onDisconnected()
+                    }
                 }
             }
         }
