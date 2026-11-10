@@ -11,12 +11,12 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.util.Log
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import com.vijay.aimagicremote.AppInitializer
 import com.vijay.aimagicremote.R
 import com.vijay.aimagicremote.bluetooth.BluetoothController
@@ -24,14 +24,12 @@ import com.vijay.aimagicremote.discovery.TvDiscoveryManager
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
 import com.vijay.aimagicremote.protocol.PcRemoteProtocol
 import com.vijay.aimagicremote.protocol.RemoteManager
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
  * Main Activity for Air Remote App
- * Features: iOS 18 Glassmorphism Dark Theme, Target Filtering,
- * 3D Gyroscope Air Mouse, Trackpad, D-Pad, TV Code Pairing, and Auto-Discovery.
+ * Features: iOS 18 Glassmorphism Dark Theme, Haptic Tactile Feedback,
+ * Context-Aware Guidance Dialogs, 3D Gyroscope Air Mouse, Trackpad, D-Pad, TV Code Pairing, and Auto-Discovery.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -179,12 +177,13 @@ class MainActivity : AppCompatActivity() {
         discoveryManager = app.getTvDiscovery()
 
         // Set up target selector click handlers
-        targetTvBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.ANDROID_TV) }
-        targetPcBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.WINDOWS_PC) }
-        targetBtBtn?.setOnClickListener { setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID) }
+        targetTvBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.ANDROID_TV) }
+        targetPcBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.WINDOWS_PC) }
+        targetBtBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID) }
 
         // Set up manual connect button
-        btnConnect?.setOnClickListener {
+        btnConnect?.setOnClickListener { v ->
+            triggerHaptic(v)
             if (isConnected) {
                 disconnectDevice()
             } else {
@@ -198,20 +197,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Quick action buttons
-        btnQrCode?.setOnClickListener { showQrInfoDialog() }
-        btnPairingCode?.setOnClickListener { showPairingCodeDialog() }
-        btnKeyboardText?.setOnClickListener { showKeyboardTextInputDialog() }
-        btnRescan?.setOnClickListener { startWifiDeviceDiscovery() }
+        btnQrCode?.setOnClickListener { v -> triggerHaptic(v); showQrInfoDialog() }
+        btnPairingCode?.setOnClickListener { v -> triggerHaptic(v); showPairingCodeDialog() }
+        btnKeyboardText?.setOnClickListener { v -> triggerHaptic(v); showKeyboardTextInputDialog() }
+        btnRescan?.setOnClickListener { v -> triggerHaptic(v); startWifiDeviceDiscovery() }
 
         // Recalibrate Gyro Button
-        btnRecalibrate?.setOnClickListener {
+        btnRecalibrate?.setOnClickListener { v ->
+            triggerHaptic(v)
             showRecalibrateDialog()
         }
 
         // Mode Tab Handlers
-        tabDpad?.setOnClickListener { switchMode("dpad") }
-        tabAirMouse?.setOnClickListener { switchMode("air_mouse") }
-        tabTrackpad?.setOnClickListener { switchMode("trackpad") }
+        tabDpad?.setOnClickListener { v -> triggerHaptic(v); switchMode("dpad") }
+        tabAirMouse?.setOnClickListener { v -> triggerHaptic(v); switchMode("air_mouse") }
+        tabTrackpad?.setOnClickListener { v -> triggerHaptic(v); switchMode("trackpad") }
 
         // Set up Air Mouse & Trackpad Listeners
         setupAirMouseAndTrackpad()
@@ -233,6 +233,10 @@ class MainActivity : AppCompatActivity() {
 
         // Automatically start Wi-Fi device discovery on launch
         startWifiDeviceDiscovery()
+    }
+
+    private fun triggerHaptic(view: View?) {
+        view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 
     private fun bindViews() {
@@ -348,27 +352,32 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupAirMouseAndTrackpad() {
-        viewAirMouseTarget?.setOnClickListener {
+        viewAirMouseTarget?.setOnClickListener { v ->
+            triggerHaptic(v)
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = false)
         }
 
-        btnAirLeftClick?.setOnClickListener {
+        btnAirLeftClick?.setOnClickListener { v ->
+            triggerHaptic(v)
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = false)
         }
 
-        btnAirRightClick?.setOnClickListener {
+        btnAirRightClick?.setOnClickListener { v ->
+            triggerHaptic(v)
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = true)
         }
 
-        btnTrackLeftClick?.setOnClickListener {
+        btnTrackLeftClick?.setOnClickListener { v ->
+            triggerHaptic(v)
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = false)
         }
 
-        btnTrackRightClick?.setOnClickListener {
+        btnTrackRightClick?.setOnClickListener { v ->
+            triggerHaptic(v)
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = true)
         }
@@ -388,12 +397,13 @@ class MainActivity : AppCompatActivity() {
         var initialTouchX = 0f
         var initialTouchY = 0f
 
-        viewTrackpadSurface?.setOnTouchListener { _, event ->
+        viewTrackpadSurface?.setOnTouchListener { v, event ->
             val action = event.actionMasked
             val pointerCount = event.pointerCount
 
             when (action) {
                 MotionEvent.ACTION_DOWN -> {
+                    triggerHaptic(v)
                     lastTouchX = event.x
                     lastTouchY = event.y
                     initialTouchX = event.x
@@ -433,6 +443,7 @@ class MainActivity : AppCompatActivity() {
                     val distMoved = abs(event.x - initialTouchX) + abs(event.y - initialTouchY)
 
                     if (duration < 250 && distMoved < 15) {
+                        triggerHaptic(v)
                         syncTargetIp()
                         RemoteManager.sendClick(isRightClick = false)
                     }
@@ -442,6 +453,7 @@ class MainActivity : AppCompatActivity() {
                     if (pointerCount == 2) {
                         val duration = System.currentTimeMillis() - touchDownTime
                         if (duration < 300) {
+                            triggerHaptic(v)
                             syncTargetIp()
                             RemoteManager.sendClick(isRightClick = true)
                         }
@@ -545,7 +557,8 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(if (isThisConnected) Color.parseColor("#0F1115") else Color.WHITE)
                 textSize = 12f
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setOnClickListener {
+                setOnClickListener { v ->
+                    triggerHaptic(v)
                     if (dev.deviceType == TvDiscoveryManager.DeviceType.WINDOWS_PC) {
                         setTargetDevice(RemoteManager.TargetDeviceType.WINDOWS_PC)
                     } else {
@@ -620,6 +633,7 @@ class MainActivity : AppCompatActivity() {
                                 connectToDevice(targetIp)
                             } else {
                                 txtStatus?.text = "Pairing Failed: $msg"
+                                showConnectionGuidanceDialog(targetIp, msg)
                             }
                             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                         }
@@ -630,6 +644,31 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showConnectionGuidanceDialog(ip: String, errorText: String) {
+        val isTv = activeTarget == RemoteManager.TargetDeviceType.ANDROID_TV
+        val message = if (isTv) {
+            "Could not complete Wi-Fi pairing to Android TV ($ip).\n\n" +
+            "1. Enable 'Control by Mobile App' in TV Settings -> Network & Internet.\n" +
+            "2. Allow 'Android TV Remote Service' in TV Settings -> Apps -> Special Access.\n" +
+            "3. Or select 'Bluetooth HID' mode at the top to pair directly as a Bluetooth Remote."
+        } else {
+            "Could not connect to Windows PC ($ip:9090).\n\n" +
+            "1. Ensure 'pc_receiver.ps1' is running on your PC.\n" +
+            "2. Allow Port 9090 in Windows Defender Firewall.\n" +
+            "3. Verify phone and PC are connected to the same Wi-Fi router."
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Connection Guidance")
+            .setMessage(message)
+            .setPositiveButton("Bluetooth Mode") { dialog, _ ->
+                setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Dismiss") { dialog, _ -> dialog.dismiss() }
             .show()
     }
 
@@ -658,18 +697,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRemoteControlButtons() {
-        btnUp?.setOnClickListener { onBtnUpClick() }
-        btnDown?.setOnClickListener { onBtnDownClick() }
-        btnLeft?.setOnClickListener { onBtnLeftClick() }
-        btnRight?.setOnClickListener { onBtnRightClick() }
-        btnOk?.setOnClickListener { onBtnOkClick() }
-        btnCenterOk?.setOnClickListener { onBtnOkClick() }
-        btnBack?.setOnClickListener { onBtnBackClick() }
-        btnHome?.setOnClickListener { onBtnHomeClick() }
-        btnPower?.setOnClickListener { onBtnPowerClick() }
-        btnVolumeUp?.setOnClickListener { onBtnVolumeUpClick() }
-        btnVolumeDown?.setOnClickListener { onBtnVolumeDownClick() }
-        btnMute?.setOnClickListener { onBtnMuteClick() }
+        btnUp?.setOnClickListener { v -> triggerHaptic(v); onBtnUpClick() }
+        btnDown?.setOnClickListener { v -> triggerHaptic(v); onBtnDownClick() }
+        btnLeft?.setOnClickListener { v -> triggerHaptic(v); onBtnLeftClick() }
+        btnRight?.setOnClickListener { v -> triggerHaptic(v); onBtnRightClick() }
+        btnOk?.setOnClickListener { v -> triggerHaptic(v); onBtnOkClick() }
+        btnCenterOk?.setOnClickListener { v -> triggerHaptic(v); onBtnOkClick() }
+        btnBack?.setOnClickListener { v -> triggerHaptic(v); onBtnBackClick() }
+        btnHome?.setOnClickListener { v -> triggerHaptic(v); onBtnHomeClick() }
+        btnPower?.setOnClickListener { v -> triggerHaptic(v); onBtnPowerClick() }
+        btnVolumeUp?.setOnClickListener { v -> triggerHaptic(v); onBtnVolumeUpClick() }
+        btnVolumeDown?.setOnClickListener { v -> triggerHaptic(v); onBtnVolumeDownClick() }
+        btnMute?.setOnClickListener { v -> triggerHaptic(v); onBtnMuteClick() }
     }
 
     private fun syncTargetIp() {
@@ -717,7 +756,7 @@ class MainActivity : AppCompatActivity() {
                         btnConnect?.isEnabled = true
                         btnConnect?.text = "Connect"
                         txtStatus?.text = "Connection Failed: $error"
-                        Toast.makeText(this@MainActivity, "Connection Failed: $error", Toast.LENGTH_LONG).show()
+                        showConnectionGuidanceDialog(cleanIp, error)
                         enableRemoteControls(true)
                     }
                 }
