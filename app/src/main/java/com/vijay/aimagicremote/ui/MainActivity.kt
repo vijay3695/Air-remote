@@ -448,16 +448,35 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupAirMouseAndTrackpad() {
-        viewAirMouseTarget?.setOnClickListener { v ->
-            triggerHaptic(v)
-            if (activeMode != "air_mouse") return@setOnClickListener
-            if (!isConnected) {
-                Toast.makeText(this, "Connect a device first", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        var airDownTime = 0L
+        var airDownX = 0f
+        var airDownY = 0f
+        viewAirMouseTarget?.setOnTouchListener { v, event ->
+            if (activeMode != "air_mouse") return@setOnTouchListener false
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    triggerHaptic(v)
+                    airDownTime = System.currentTimeMillis()
+                    airDownX = event.x
+                    airDownY = event.y
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val duration = System.currentTimeMillis() - airDownTime
+                    val moved = kotlin.math.abs(event.x - airDownX) + kotlin.math.abs(event.y - airDownY)
+                    if (duration < 400 && moved < 40) {
+                        if (!isConnected) {
+                            Toast.makeText(this@MainActivity, "Connect a device first", Toast.LENGTH_SHORT).show()
+                        } else {
+                            syncTargetIp()
+                            RemoteManager.sendClick(isRightClick = false)
+                            Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    true
+                }
+                else -> false
             }
-            syncTargetIp()
-            RemoteManager.sendClick(isRightClick = false)
-            Toast.makeText(this, "Click sent", Toast.LENGTH_SHORT).show()
         }
 
         btnAirLeftClick?.setOnClickListener { v ->
@@ -548,7 +567,7 @@ class MainActivity : AppCompatActivity() {
                     val duration = System.currentTimeMillis() - touchDownTime
                     val distMoved = abs(event.x - initialTouchX) + abs(event.y - initialTouchY)
 
-                    if (duration < 250 && distMoved < 25) {
+                    if (duration < 400 && distMoved < 40) {
                         triggerHaptic(v)
                         if (!isConnected) {
                             Toast.makeText(this@MainActivity, "Connect a device first", Toast.LENGTH_SHORT).show()
