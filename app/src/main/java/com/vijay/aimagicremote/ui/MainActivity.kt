@@ -91,6 +91,19 @@ class MainActivity : AppCompatActivity() {
     private var btnRecalibrate: Button? = null
     private var btnAirLeftClick: Button? = null
     private var btnAirRightClick: Button? = null
+    private var btnAirBack: Button? = null
+    private var btnAirHome: Button? = null
+    private var btnAirOk: Button? = null
+    private var btnAirVolUp: Button? = null
+    private var btnAirVolDown: Button? = null
+    private var btnAirMute: Button? = null
+
+    private var btnTrackBack: Button? = null
+    private var btnTrackHome: Button? = null
+    private var btnTrackOk: Button? = null
+    private var btnTrackVolUp: Button? = null
+    private var btnTrackVolDown: Button? = null
+    private var btnTrackMute: Button? = null
     private var seekbarSensitivity: SeekBar? = null
 
     private var viewTrackpadSurface: View? = null
@@ -279,6 +292,7 @@ class MainActivity : AppCompatActivity() {
 
         // Set up Air Mouse & Trackpad Listeners
         setupAirMouseAndTrackpad()
+        setupPointerSecondaryButtons()
 
         // Set up remote control button click listeners
         setupRemoteControlButtons()
@@ -351,9 +365,24 @@ class MainActivity : AppCompatActivity() {
 
         viewAirMouseTarget = findViewById(R.id.view_air_mouse_target)
         txtAirMouseCoords = findViewById(R.id.txt_air_mouse_coords)
-        btnRecalibrate = findViewById(R.id.btn_recalibrate)
+        btnRecalibrate = null
         btnAirLeftClick = findViewById(R.id.btn_air_left_click)
         btnAirRightClick = findViewById(R.id.btn_air_right_click)
+        btnAirBack = findViewById(R.id.btn_air_back)
+        btnAirHome = findViewById(R.id.btn_air_home)
+        btnAirOk = findViewById(R.id.btn_air_ok)
+        btnAirVolUp = findViewById(R.id.btn_air_volup)
+        btnAirVolDown = findViewById(R.id.btn_air_voldown)
+        btnAirMute = findViewById(R.id.btn_air_mute)
+
+        btnTrackLeftClick = findViewById(R.id.btn_track_left_click)
+        btnTrackRightClick = findViewById(R.id.btn_track_right_click)
+        btnTrackBack = findViewById(R.id.btn_track_back)
+        btnTrackHome = findViewById(R.id.btn_track_home)
+        btnTrackOk = findViewById(R.id.btn_track_ok)
+        btnTrackVolUp = findViewById(R.id.btn_track_volup)
+        btnTrackVolDown = findViewById(R.id.btn_track_voldown)
+        btnTrackMute = findViewById(R.id.btn_track_mute)
         seekbarSensitivity = findViewById(R.id.seekbar_sensitivity)
 
         viewTrackpadSurface = findViewById(R.id.view_trackpad_surface)
@@ -975,6 +1004,23 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    private fun setupPointerSecondaryButtons() {
+        // Secondary buttons for Air Mouse mode
+        btnAirBack?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.BACK, "BACK") } }
+        btnAirHome?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.HOME, "HOME") } }
+        btnAirOk?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER") } }
+        btnAirVolUp?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_UP, "VOL_UP") } }
+        btnAirVolDown?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_DOWN, "VOL_DOWN") } }
+        btnAirMute?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.MUTE, "MUTE") } }
+
+        btnTrackBack?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.BACK, "BACK") } }
+        btnTrackHome?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.HOME, "HOME") } }
+        btnTrackOk?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER") } }
+        btnTrackVolUp?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_UP, "VOL_UP") } }
+        btnTrackVolDown?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.VOLUME_DOWN, "VOL_DOWN") } }
+        btnTrackMute?.setOnClickListener { v -> triggerHaptic(v); if (isConnected) { syncTargetIp(); RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.MUTE, "MUTE") } }
     }
 
     private fun setupRemoteControlButtons() {
