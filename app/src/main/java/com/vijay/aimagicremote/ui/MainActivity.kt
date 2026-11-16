@@ -471,8 +471,17 @@ class MainActivity : AppCompatActivity() {
                             syncTargetIp()
                             if (activeTarget == RemoteManager.TargetDeviceType.WINDOWS_PC) {
                                 RemoteManager.sendClick(isRightClick = false)
+                                Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
+                            } else if (activeTarget == RemoteManager.TargetDeviceType.ANDROID_TV) {
+                                Atrpv2Protocol.sendKey(Atrpv2Protocol.KEY_CODES.OK) { err ->
+                                    runOnUiThread {
+                                        if (err == null) Toast.makeText(this@MainActivity, "OK sent", Toast.LENGTH_SHORT).show()
+                                        else Toast.makeText(this@MainActivity, "Failed: $err", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             } else {
                                 RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER")
+                                Toast.makeText(this@MainActivity, "Key sent", Toast.LENGTH_SHORT).show()
                             }
                             Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
                         }
@@ -579,8 +588,17 @@ class MainActivity : AppCompatActivity() {
                             syncTargetIp()
                             if (activeTarget == RemoteManager.TargetDeviceType.WINDOWS_PC) {
                                 RemoteManager.sendClick(isRightClick = false)
+                                Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
+                            } else if (activeTarget == RemoteManager.TargetDeviceType.ANDROID_TV) {
+                                Atrpv2Protocol.sendKey(Atrpv2Protocol.KEY_CODES.OK) { err ->
+                                    runOnUiThread {
+                                        if (err == null) Toast.makeText(this@MainActivity, "OK sent", Toast.LENGTH_SHORT).show()
+                                        else Toast.makeText(this@MainActivity, "Failed: $err", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             } else {
                                 RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER")
+                                Toast.makeText(this@MainActivity, "Key sent", Toast.LENGTH_SHORT).show()
                             }
                             Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
                         }

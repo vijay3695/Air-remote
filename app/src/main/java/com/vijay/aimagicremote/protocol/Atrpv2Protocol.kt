@@ -609,8 +609,8 @@ object Atrpv2Protocol {
      */
     @Volatile
     private var lastPointerKeyTime: Long = 0
-    private val pointerKeyDebounceMs: Long = 60
-    private val pointerDeltaThreshold: Float = 6.0f
+    private val pointerKeyDebounceMs: Long = 200
+    private val pointerDeltaThreshold: Float = 10.0f
 
     fun sendPointerMove(dx: Float, dy: Float) {
         if (!isConnected) return
