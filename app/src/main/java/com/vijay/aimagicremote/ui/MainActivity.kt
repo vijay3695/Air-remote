@@ -451,8 +451,13 @@ class MainActivity : AppCompatActivity() {
         viewAirMouseTarget?.setOnClickListener { v ->
             triggerHaptic(v)
             if (activeMode != "air_mouse") return@setOnClickListener
+            if (!isConnected) {
+                Toast.makeText(this, "Connect a device first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             syncTargetIp()
             RemoteManager.sendClick(isRightClick = false)
+            Toast.makeText(this, "Click sent", Toast.LENGTH_SHORT).show()
         }
 
         btnAirLeftClick?.setOnClickListener { v ->
@@ -543,10 +548,15 @@ class MainActivity : AppCompatActivity() {
                     val duration = System.currentTimeMillis() - touchDownTime
                     val distMoved = abs(event.x - initialTouchX) + abs(event.y - initialTouchY)
 
-                    if (duration < 250 && distMoved < 15) {
+                    if (duration < 250 && distMoved < 25) {
                         triggerHaptic(v)
-                        syncTargetIp()
-                        RemoteManager.sendClick(isRightClick = false)
+                        if (!isConnected) {
+                            Toast.makeText(this@MainActivity, "Connect a device first", Toast.LENGTH_SHORT).show()
+                        } else {
+                            syncTargetIp()
+                            RemoteManager.sendClick(isRightClick = false)
+                            Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
 
