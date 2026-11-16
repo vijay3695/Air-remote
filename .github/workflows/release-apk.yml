@@ -27,23 +27,31 @@ jobs:
           packages: platform-tools
 
       - name: Install Android SDK platform
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Create release keystore
+        run: |
+          keytool -genkeypair -v -keystore release.keystore -alias airremote -keyalg RSA -keysize 2048 -validity 10000 -storepass airremote -keypass airremote -dname "CN=Air Remote, O=Vijay, C=IN"
+          echo "storeFile=release.keystore" > keystore.properties
+          echo "storePassword=airremote" >> keystore.properties
+          echo "keyAlias=airremote" >> keystore.properties
+          echo "keyPassword=airremote" >> keystore.properties
 
       - name: Build and test APK
         run: |
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest assembleDebug
+          ./gradlew testDebugUnitTest assembleRelease
 
       - name: Prepare release APK
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk "release/Air-Remote-${GITHUB_REF_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/*.apk "release/Air-Remote-${GITHUB_REF_NAME}.apk"
 
       - name: Publish APK to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            "release/Air-Remote-${GITHUB_REF_NAME}-debug.apk" \
+            "release/Air-Remote-${GITHUB_REF_NAME}.apk" \
             --title "Air Remote ${GITHUB_REF_NAME}" \
-            --notes "Debug APK built by GitHub Actions. This release is for testing; TV compatibility depends on the tested models and firmware."
+            --notes "Release APK built by GitHub Actions. TV compatibility depends on the tested models and firmware."
