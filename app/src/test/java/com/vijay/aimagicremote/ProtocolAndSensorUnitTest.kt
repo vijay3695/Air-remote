@@ -132,7 +132,7 @@ class ProtocolAndSensorUnitTest {
 
     @Test
     fun testRemoteManagerTruthfulPointerSupportMatrix() {
-        assertFalse(RemoteManager.supportsPointer(RemoteManager.TargetDeviceType.BLUETOOTH_HID))
+        assertTrue(RemoteManager.supportsPointer(RemoteManager.TargetDeviceType.BLUETOOTH_HID))
         assertFalse(RemoteManager.supportsPointer(RemoteManager.TargetDeviceType.ANDROID_TV))
         assertTrue(RemoteManager.supportsPointer(RemoteManager.TargetDeviceType.WINDOWS_PC))
         assertTrue(RemoteManager.supportsPointer(RemoteManager.TargetDeviceType.LG_WEBOS))
