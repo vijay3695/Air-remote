@@ -120,8 +120,19 @@ class TvDiscoveryManager(private val context: Context) {
                                 deviceType = type
                             )
                             synchronized(devicesLock) {
-                                if (discoveredDevices.none { it.host == targetIp && it.port == port }) {
+                                val existingIndex = discoveredDevices.indexOfFirst {
+                                    it.host == targetIp && it.deviceType == type
+                                }
+                                if (existingIndex < 0) {
                                     discoveredDevices.add(devInfo)
+                                } else {
+                                    // Collapse multiple ports of the same TV (e.g. 6466/6467)
+                                    // into one entry, preferring the primary service port.
+                                    val primaryPorts = setOf(9090, 6466, 8001, 3000, 8060, 5555)
+                                    val existing = discoveredDevices[existingIndex]
+                                    if (port in primaryPorts && existing.port !in primaryPorts) {
+                                        discoveredDevices[existingIndex] = devInfo
+                                    }
                                 }
                             }
                             handler.post { discoveryListener?.invoke(getDiscoveredDevices()) }
