@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.log
+*.hprof
+C:\Users\harsh\AppData\Local\Google\AndroidStudio2026.2.2\projects\air-remote.5dc44528\.artifacts\fa801fcd-f493-4275-8761-1175cbca29fd

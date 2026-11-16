@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme using MaterialComponents NoActionBar -->
+    <style name="Theme.MagicRemote" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color -->
+        <item name="colorPrimary">#00E676</item>
+        <item name="colorPrimaryVariant">#00C853</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <!-- Secondary brand color -->
+        <item name="colorSecondary">#00B0FF</item>
+        <item name="colorSecondaryVariant">#0091EA</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <!-- Status bar color -->
+        <item name="android:statusBarColor">#0F1115</item>
+        <item name="android:windowBackground">#0F1115</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.MagicRemote.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>

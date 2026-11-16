@@ -1,0 +1,49 @@
+name: Publish Air Remote APK release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Build and test APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew testDebugUnitTest assembleDebug
+
+      - name: Prepare release APK
+        run: |
+          mkdir -p release
+          cp app/build/outputs/apk/debug/app-debug.apk "release/Air-Remote-${GITHUB_REF_NAME}-debug.apk"
+
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "release/Air-Remote-${GITHUB_REF_NAME}-debug.apk" \
+            --title "Air Remote ${GITHUB_REF_NAME}" \
+            --notes "Debug APK built by GitHub Actions. This release is for testing; TV compatibility depends on the tested models and firmware."
