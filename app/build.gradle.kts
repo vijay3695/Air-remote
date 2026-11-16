@@ -14,12 +14,12 @@ plugins {
 
 android {
     namespace = "com.vijay.aimagicremote"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.vijay.aimagicremote"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
