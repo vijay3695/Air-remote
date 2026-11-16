@@ -874,9 +874,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAboutDialog() {
+        val message = "Air Remote\\nVersion 1.0\\n\\n" +
+            "Developer: Vijay\\n" +
+            "GitHub: <a href=\\"https://github.com/vijay3695/Air-remote\\">https://github.com/vijay3695/Air-remote</a>\\n\\n" +
+            "Local Wi-Fi and Bluetooth remote control for Windows, Android TV, LG webOS, and Samsung Tizen.\\n\\n" +
+            "License: Apache 2.0"
+
+        val textView = TextView(this).apply {
+            text = android.text.Html.fromHtml(message.replace("\\n", "<br>"), android.text.Html.FROM_HTML_MODE_LEGACY)
+            textSize = 14f
+            setTextColor(android.graphics.Color.parseColor("#A0A5B5"))
+            setPadding(24, 16, 24, 16)
+            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+
         AlertDialog.Builder(this)
-            .setTitle("About")
-            .setMessage("Air Remote\\nVersion 1.0\\nLocal Wi-Fi remote control for Windows, Android TV, LG webOS, and Samsung Tizen.")
+            .setTitle("About Air Remote")
+            .setView(textView)
             .setPositiveButton("Close") { dialog, _ -> dialog.dismiss() }
             .show()
     }
