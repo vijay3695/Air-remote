@@ -876,7 +876,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAboutDialog() {
         val message = "Air Remote\\nVersion 1.0\\n\\n" +
             "Developer: Vijay\\n" +
-            "GitHub: <a href=\\"https://github.com/vijay3695/Air-remote\\">https://github.com/vijay3695/Air-remote</a>\\n\\n" +
+            "GitHub: <a href=\"https://github.com/vijay3695/Air-remote\">https://github.com/vijay3695/Air-remote</a>\\n\\n" +
             "Local Wi-Fi and Bluetooth remote control for Windows, Android TV, LG webOS, and Samsung Tizen.\\n\\n" +
             "License: Apache 2.0"
 
