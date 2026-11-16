@@ -49,6 +49,9 @@ class MainActivity : AppCompatActivity() {
 
     // UI Header & Status Components
     private var txtWifiStatus: TextView? = null
+    private var drawerLayout: androidx.drawerlayout.widget.DrawerLayout? = null
+    private var navView: com.google.android.material.navigation.NavigationView? = null
+    private var btnMenu: android.widget.ImageButton? = null
     private var targetTvBtn: Button? = null
     private var targetPcBtn: Button? = null
     private var targetBtBtn: Button? = null
@@ -149,6 +152,23 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         bindViews()
+
+        // Hamburger drawer
+        btnMenu?.setOnClickListener { drawerLayout?.openDrawer(androidx.core.view.GravityCompat.START) }
+        navView?.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_devices -> { }
+                R.id.nav_manual -> showManualConnectDialog()
+                R.id.nav_tv_code -> showPairingCodeDialog()
+                R.id.nav_keyboard -> showKeyboardTextInputDialog()
+                R.id.nav_qr -> showQrInfoDialog()
+                R.id.nav_settings -> showSettingsDialog()
+                R.id.nav_faq -> showFaqDialog()
+                R.id.nav_about -> showAboutDialog()
+            }
+            drawerLayout?.closeDrawers()
+            true
+        }
 
         // Register Broadcast Receivers
         registerReceiverCompat(
@@ -280,6 +300,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
+        drawerLayout = findViewById(R.id.drawer_layout)
+        navView = findViewById(R.id.nav_view)
+        btnMenu = findViewById(R.id.btn_menu)
         txtWifiStatus = findViewById(R.id.txt_wifi_status)
         targetTvBtn = findViewById(R.id.target_tv)
         targetPcBtn = findViewById(R.id.target_pc)
@@ -291,11 +314,11 @@ class MainActivity : AppCompatActivity() {
         txtStatus = findViewById(R.id.txt_status)
         containerDiscoveredTvs = findViewById(R.id.container_discovered_tvs)
 
-        tvIpAddress = findViewById(R.id.tv_ip_address)
+        tvIpAddress = null
         btnConnect = findViewById(R.id.btn_connect)
-        btnQrCode = findViewById(R.id.btn_qr_code)
-        btnPairingCode = findViewById(R.id.btn_pairing_code)
-        btnKeyboardText = findViewById(R.id.btn_keyboard_text)
+        btnQrCode = null
+        btnPairingCode = null
+        btnKeyboardText = null
         btnRescan = findViewById(R.id.btn_rescan)
 
         tabDpad = findViewById(R.id.tab_dpad)
@@ -740,6 +763,66 @@ class MainActivity : AppCompatActivity() {
 
             containerDiscoveredTvs?.addView(devCard)
         }
+    }
+
+    private fun showManualConnectDialog() {
+        val input = EditText(this).apply {
+            hint = "Enter TV or PC IP address"
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(android.graphics.Color.GRAY)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Manual Connect")
+            .setView(input)
+            .setPositiveButton("Connect") { dialog, _ ->
+                val raw = input.text.toString().trim().removePrefix("/")
+                if (raw.isNotEmpty()) {
+                    val (ip, port) = if (raw.contains(":")) {
+                        val parts = raw.split(":", limit = 2)
+                        parts[0] to (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+                    } else {
+                        raw to 0
+                    }
+                    connectToDevice(ip, port)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Settings")
+            .setMessage("Sensitivity: use the slider in Air Mouse mode.\\nCalibration: use 'Calibrate Gyro' in Air Mouse mode.")
+            .setPositiveButton("Calibrate Gyro") { dialog, _ ->
+                showRecalibrateDialog()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Close") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showFaqDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Help & FAQ")
+            .setMessage(
+                "Windows:\\n1. Run start_pc_receiver.bat on the PC.\\n2. Allow TCP/UDP 9090 in firewall.\\n3. Connect phone to PC IP:9090.\\n\\n" +
+                "Android TV / Mi Box / Airtel / TCL:\\n1. Enable Control by mobile apps.\\n2. Keep TV awake.\\n3. Use TV Code pairing.\\n\\n" +
+                "LG webOS:\\nAccept registration prompt; pointer opens after registration.\\n\\n" +
+                "Samsung Tizen:\\nAllow connection; enable mouse mode for pointer.\\n\\n" +
+                "If no devices are found, check Wi-Fi and TV settings."
+            )
+            .setPositiveButton("Close") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showAboutDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("About")
+            .setMessage("Air Remote\\nVersion 1.0\\nLocal Wi-Fi remote control for Windows, Android TV, LG webOS, and Samsung Tizen.")
+            .setPositiveButton("Close") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun showQrInfoDialog() {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_devices" android:title="Devices &amp; Connect" />
+    <item android:id="@+id/nav_manual" android:title="Manual Connect" />
+    <item android:id="@+id/nav_tv_code" android:title="TV Code Pairing" />
+    <item android:id="@+id/nav_keyboard" android:title="Send Text / Keyboard" />
+    <item android:id="@+id/nav_qr" android:title="QR Pairing Info" />
+    <item android:id="@+id/nav_settings" android:title="Settings" />
+    <item android:id="@+id/nav_faq" android:title="Help &amp; FAQ" />
+    <item android:id="@+id/nav_about" android:title="About" />
+</menu>
