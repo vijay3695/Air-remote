@@ -58,7 +58,35 @@
                     android:background="#1A222B"
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="7dp" />
+
+                <Button
+                    android:id="@+id/btn_toggle_controls"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:text="Hide"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#282D3C"
+                    android:textColor="#FFFFFF" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/txt_compact_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Controls hidden"
+                android:textColor="#A0A5B5"
+                android:textSize="12sp"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/panel_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
             <!-- Target selector -->
             <LinearLayout
@@ -164,6 +192,8 @@
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+            </LinearLayout>
+
             </LinearLayout>
 
             <!-- Mode tabs -->

@@ -54,6 +54,9 @@ class MainActivity : AppCompatActivity() {
     private var drawerLayout: androidx.drawerlayout.widget.DrawerLayout? = null
     private var navView: com.google.android.material.navigation.NavigationView? = null
     private var btnMenu: android.widget.ImageButton? = null
+    private var btnToggleControls: Button? = null
+    private var panelControls: LinearLayout? = null
+    private var txtCompactStatus: TextView? = null
     private var targetTvBtn: Button? = null
     private var targetPcBtn: Button? = null
     private var targetBtBtn: Button? = null
@@ -157,6 +160,12 @@ class MainActivity : AppCompatActivity() {
 
         // Hamburger drawer
         btnMenu?.setOnClickListener { drawerLayout?.openDrawer(androidx.core.view.GravityCompat.START) }
+        btnToggleControls?.setOnClickListener {
+            val visible = panelControls?.visibility != View.GONE
+            panelControls?.visibility = if (visible) View.GONE else View.VISIBLE
+            txtCompactStatus?.visibility = if (visible) View.VISIBLE else View.GONE
+            btnToggleControls?.text = if (visible) "Show" else "Hide"
+        }
         navView?.setNavigationItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_devices -> { }
@@ -311,6 +320,9 @@ class MainActivity : AppCompatActivity() {
         drawerLayout = findViewById(R.id.drawer_layout)
         navView = findViewById(R.id.nav_view)
         btnMenu = findViewById(R.id.btn_menu)
+        btnToggleControls = findViewById(R.id.btn_toggle_controls)
+        panelControls = findViewById(R.id.panel_controls)
+        txtCompactStatus = findViewById(R.id.txt_compact_status)
         txtWifiStatus = findViewById(R.id.txt_wifi_status)
         targetTvBtn = findViewById(R.id.target_tv)
         targetPcBtn = findViewById(R.id.target_pc)
@@ -661,7 +673,14 @@ class MainActivity : AppCompatActivity() {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             @Suppress("DEPRECATION")
             val wifiInfo = wifiManager.connectionInfo
-            val ssid = wifiInfo.ssid?.replace("\"", "") ?: "Wi-Fi"
+            var ssid = wifiInfo.ssid?.replace("\"", "") ?: ""
+            if (ssid.isBlank() || ssid == "<unknown ssid>") {
+                // Android 12+ may hide SSID without location permission.
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 1002)
+                }
+                ssid = "Wi-Fi"
+            }
             txtWifiStatus?.text = "● Connected ($ssid)"
             txtWifiStatus?.setTextColor(intColor(0xFF00E676))
         } else {
@@ -1144,6 +1163,13 @@ class MainActivity : AppCompatActivity() {
         if (activeMode != "dpad" || !isConnected) return
         syncTargetIp()
         RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.MUTE, "MUTE")
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1002) {
+            updateWifiNetworkState()
+        }
     }
 
     override fun onPause() {
