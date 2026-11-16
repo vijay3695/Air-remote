@@ -44,17 +44,17 @@ class HelpFaqActivity : AppCompatActivity() {
         }
         root.addView(header)
 
-        section("Getting Started", "1. Select target (Android TV, Windows PC, LG, Samsung, Roku).\\n2. Tap Rescan or enter IP manually.\\n3. Tap Connect.\\n4. Use Remote / Air Mouse / Trackpad tabs.")
+        section("Getting Started", "1. Select target (Android TV, Windows PC, LG, Samsung, Roku).\n2. Tap Rescan or enter IP manually.\n3. Tap Connect.\n4. Use Remote / Air Mouse / Trackpad tabs.")
 
-        section("Windows PC", "1. Copy pc_receiver.ps1 to the PC.\\n2. Run start_pc_receiver.bat (or install_pc_receiver_autostart.bat once).\\n3. Allow TCP/UDP 9090 in Windows Firewall.\\n4. Connect phone to PC IP:9090.\\n\\nTrackpad and Air Mouse require an active connection.")
+        section("Windows PC", "1. Copy pc_receiver.ps1 to the PC.\n2. Run start_pc_receiver.bat (or install_pc_receiver_autostart.bat once).\n3. Allow TCP/UDP 9090 in Windows Firewall.\n4. Connect phone to PC IP:9090.\n\nTrackpad and Air Mouse require an active connection.")
 
-        section("Android TV / Google TV / Mi Box / Airtel / TCL", "1. Enable 'Control by mobile apps' / Android TV Remote Service.\\n2. Keep TV awake.\\n3. Use TV Code pairing (6-character code).\\n4. Air Mouse uses D-pad key mapping (no native cursor).")
+        section("Android TV / Google TV / Mi Box / Airtel / TCL", "1. Enable 'Control by mobile apps' / Android TV Remote Service.\n2. Keep TV awake.\n3. Use TV Code pairing (6-character code).\n4. Air Mouse uses D-pad key mapping (no native cursor).")
 
-        section("LG webOS", "1. Accept registration prompt on TV.\\n2. Client key is saved for reconnect.\\n3. Pointer socket opens after registration.\\n4. Real pointer movement supported.")
+        section("LG webOS", "1. Accept registration prompt on TV.\n2. Client key is saved for reconnect.\n3. Pointer socket opens after registration.\n4. Real pointer movement supported.")
 
-        section("Samsung Tizen", "1. Allow connection on TV.\\n2. Token saved for reconnect.\\n3. Mouse mode (ProcessMouseDevice) used when enabled.\\n4. Text uses base64 SendInputString.")
+        section("Samsung Tizen", "1. Allow connection on TV.\n2. Token saved for reconnect.\n3. Mouse mode (ProcessMouseDevice) used when enabled.\n4. Text uses base64 SendInputString.")
 
-        section("Troubleshooting", "No devices found: check Wi-Fi, TV settings, receiver running.\\nWrong IP: enter IP:port manually.\\nPairing code: enter all 6 characters (letters+numbers).\\nClick not working: ensure connected; tap feedback shows status.\\nManic cursor: reduce sensitivity slider and recalibrate gyro.")
+        section("Troubleshooting", "No devices found: check Wi-Fi, TV settings, receiver running.\nWrong IP: enter IP:port manually.\nPairing code: enter all 6 characters (letters+numbers).\nClick not working: ensure connected; tap feedback shows status.\nManic cursor: reduce sensitivity slider and recalibrate gyro.")
 
         section("Bluetooth HID", "Experimental. Pair phone as Bluetooth keyboard/mouse on target. Many TVs do not support phone-as-HID. Wi-Fi remains fallback.")
 
