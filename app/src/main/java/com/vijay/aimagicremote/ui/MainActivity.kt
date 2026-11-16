@@ -469,7 +469,11 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, "Connect a device first", Toast.LENGTH_SHORT).show()
                         } else {
                             syncTargetIp()
-                            RemoteManager.sendClick(isRightClick = false)
+                            if (activeTarget == RemoteManager.TargetDeviceType.WINDOWS_PC) {
+                                RemoteManager.sendClick(isRightClick = false)
+                            } else {
+                                RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER")
+                            }
                             Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -573,7 +577,11 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, "Connect a device first", Toast.LENGTH_SHORT).show()
                         } else {
                             syncTargetIp()
-                            RemoteManager.sendClick(isRightClick = false)
+                            if (activeTarget == RemoteManager.TargetDeviceType.WINDOWS_PC) {
+                                RemoteManager.sendClick(isRightClick = false)
+                            } else {
+                                RemoteManager.sendKey(Atrpv2Protocol.KEY_CODES.OK, "ENTER")
+                            }
                             Toast.makeText(this@MainActivity, "Click sent", Toast.LENGTH_SHORT).show()
                         }
                     }
