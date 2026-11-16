@@ -71,7 +71,7 @@
 
                 <Button android:id="@+id/target_tv" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:layout_marginEnd="4dp" android:text="Android TV" android:textSize="12sp" android:textAllCaps="false" android:textStyle="bold" android:backgroundTint="#00E676" android:textColor="#0F1115" />
                 <Button android:id="@+id/target_pc" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:layout_marginEnd="4dp" android:text="Windows PC" android:textSize="12sp" android:textAllCaps="false" android:textStyle="bold" android:backgroundTint="#282D3C" android:textColor="#A0A5B5" />
-                <Button android:id="@+id/target_bt" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="Bluetooth (N/A)" android:textSize="12sp" android:textAllCaps="false" android:textStyle="bold" android:backgroundTint="#282D3C" android:textColor="#A0A5B5" />
+                <Button android:id="@+id/target_bt" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="Bluetooth HID" android:textSize="12sp" android:textAllCaps="false" android:textStyle="bold" android:backgroundTint="#282D3C" android:textColor="#A0A5B5" />
             </LinearLayout>
 
             <LinearLayout

@@ -3,6 +3,7 @@ package com.vijay.aimagicremote.protocol
 import android.content.Context
 import android.util.Log
 import com.vijay.aimagicremote.bluetooth.BluetoothController
+import com.vijay.aimagicremote.bluetooth.BluetoothHidController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,7 +61,8 @@ object RemoteManager {
     fun supportsPointer(type: TargetDeviceType): Boolean =
         type == TargetDeviceType.WINDOWS_PC ||
             type == TargetDeviceType.LG_WEBOS ||
-            type == TargetDeviceType.SAMSUNG_TIZEN
+            type == TargetDeviceType.SAMSUNG_TIZEN ||
+            type == TargetDeviceType.BLUETOOTH_HID
 
     fun supportsText(type: TargetDeviceType): Boolean =
         type != TargetDeviceType.BLUETOOTH_HID
@@ -179,7 +181,9 @@ object RemoteManager {
                 TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.sendKey(pcKeyName)
                 TargetDeviceType.ROKU_TCL -> RokuTclProtocol.sendKey(pcKeyName)
                 TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.sendKey(pcKeyName)
-                TargetDeviceType.BLUETOOTH_HID -> Unit
+                TargetDeviceType.BLUETOOTH_HID -> if (BluetoothHidController.isConnected()) {
+                    BluetoothHidController.sendSpecialKey(pcKeyName)
+                }
             }
         }
     }
@@ -193,6 +197,9 @@ object RemoteManager {
                 TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.sendMouseMove(dx, dy)
                 TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.sendPointerMove(dx, dy)
                 TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.sendPointerMove(dx, dy)
+                TargetDeviceType.BLUETOOTH_HID -> if (BluetoothHidController.isConnected()) {
+                    BluetoothHidController.sendMouseReport(dx.toInt(), dy.toInt(), 0, 0)
+                }
                 else -> Unit
             }
         }
@@ -237,6 +244,9 @@ object RemoteManager {
                 TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.sendMouseScroll(dx, dy)
                 TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.sendPointerScroll(dx, dy)
                 TargetDeviceType.SAMSUNG_TIZEN -> SamsungTizenProtocol.sendPointerScroll(dx, dy)
+                TargetDeviceType.BLUETOOTH_HID -> if (BluetoothHidController.isConnected()) {
+                    BluetoothHidController.sendMouseScroll(dx, dy)
+                }
                 else -> Unit
             }
         }
@@ -251,7 +261,9 @@ object RemoteManager {
                 TargetDeviceType.LG_WEBOS -> LgWebOsProtocol.sendText(text)
                 TargetDeviceType.ROKU_TCL -> RokuTclProtocol.sendText(text)
                 TargetDeviceType.WINDOWS_PC -> PcRemoteProtocol.sendText(text)
-                TargetDeviceType.BLUETOOTH_HID -> Unit
+                TargetDeviceType.BLUETOOTH_HID -> if (BluetoothHidController.isConnected()) {
+                    BluetoothHidController.sendText(text)
+                }
             }
         }
     }

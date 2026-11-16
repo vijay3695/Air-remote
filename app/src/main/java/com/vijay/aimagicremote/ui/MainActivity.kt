@@ -22,10 +22,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.vijay.aimagicremote.AppInitializer
 import com.vijay.aimagicremote.R
 import com.vijay.aimagicremote.bluetooth.BluetoothController
+import com.vijay.aimagicremote.bluetooth.BluetoothHidController
 import com.vijay.aimagicremote.discovery.TvDiscoveryManager
 import com.vijay.aimagicremote.protocol.Atrpv2Protocol
 import com.vijay.aimagicremote.protocol.LgWebOsProtocol
@@ -211,7 +213,19 @@ class MainActivity : AppCompatActivity() {
         // Set up target selector click handlers
         targetTvBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.ANDROID_TV) }
         targetPcBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.WINDOWS_PC) }
-        targetBtBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID) }
+        targetBtBtn?.setOnClickListener { v ->
+            triggerHaptic(v)
+            val perms = arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            if (perms.any { ActivityCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+                ActivityCompat.requestPermissions(this, perms, 1001)
+            }
+            setTargetDevice(RemoteManager.TargetDeviceType.BLUETOOTH_HID)
+            BluetoothHidController.start(this)
+            isConnected = BluetoothHidController.isConnected()
+            txtStatus?.text = if (isConnected) "Bluetooth HID connected" else "Bluetooth HID advertising. Pair this phone from the target device."
+            refreshControlAvailability()
+            Toast.makeText(this, if (isConnected) "Bluetooth HID connected" else "Pair this phone as a Bluetooth keyboard/mouse on the target", Toast.LENGTH_LONG).show()
+        }
         targetSamsungBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.SAMSUNG_TIZEN) }
         targetLgBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.LG_WEBOS) }
         targetRokuBtn?.setOnClickListener { v -> triggerHaptic(v); setTargetDevice(RemoteManager.TargetDeviceType.ROKU_TCL) }
@@ -268,12 +282,6 @@ class MainActivity : AppCompatActivity() {
         if (lastSavedIp.isNotEmpty()) {
             tvIpAddress?.setText(lastSavedIp)
         }
-
-        // Bluetooth HID is intentionally unavailable; do not present it as a working target.
-        targetBtBtn?.isEnabled = false
-        targetBtBtn?.text = "Bluetooth (N/A)"
-        targetBtBtn?.setBackgroundColor(inactiveColor())
-        targetBtBtn?.setTextColor(inactiveTextColor())
 
         // Automatically start Wi-Fi device discovery on launch
         startWifiDeviceDiscovery()
@@ -415,7 +423,7 @@ class MainActivity : AppCompatActivity() {
         val capabilityText = when (type) {
             RemoteManager.TargetDeviceType.WINDOWS_PC -> "Windows PC pointer control available."
             RemoteManager.TargetDeviceType.LG_WEBOS -> "LG webOS pointer channel available."
-            RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID is not implemented in this app yet."
+            RemoteManager.TargetDeviceType.BLUETOOTH_HID -> "Bluetooth HID experimental. Pair this phone from the target device."
             else -> "Using the available TV remote key/pointer transport."
         }
         txtStatus?.text = "Target Mode: $targetName. ${capabilityText}"
