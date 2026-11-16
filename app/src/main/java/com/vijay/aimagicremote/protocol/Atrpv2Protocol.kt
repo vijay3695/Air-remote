@@ -638,11 +638,14 @@ object Atrpv2Protocol {
     /**
      * Pointer click (OK/Enter) for Android TV / Google TV.
      */
+    @Volatile
+    private var lastPointerClickTime: Long = 0
+
     fun sendPointerClick() {
         if (!isConnected) return
         val now = System.currentTimeMillis()
-        if (now - lastPointerKeyTime < pointerKeyDebounceMs) return
-        lastPointerKeyTime = now
+        if (now - lastPointerClickTime < pointerKeyDebounceMs) return
+        lastPointerClickTime = now
         scope.launch(Dispatchers.IO) {
             sendKey(KEY_CODES.OK, KeyDirection.SHORT, null)
         }

@@ -85,7 +85,7 @@ class BluetoothController(private val context: Context) : SensorEventListener {
     @Volatile
     private var isAirMouseActive: Boolean = false
     @Volatile
-    var pointerSensitivity: Float = 1.5f
+    var pointerSensitivity: Float = 1.0f
 
     // Rotation matrix for gravity alignment
     private val rotationMatrix = FloatArray(9)
@@ -309,8 +309,8 @@ class BluetoothController(private val context: Context) : SensorEventListener {
                 val smoothDx = filterX.filter(deltaX, timestamp)
                 val smoothDy = filterY.filter(deltaY, timestamp)
 
-                val scaledDx = (smoothDx * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
-                val scaledDy = (smoothDy * 28.0f * pointerSensitivity).coerceIn(-35.0f, 35.0f)
+                val scaledDx = (smoothDx * 8.0f * pointerSensitivity).coerceIn(-12.0f, 12.0f)
+                val scaledDy = (smoothDy * 8.0f * pointerSensitivity).coerceIn(-12.0f, 12.0f)
 
                 if (abs(scaledDx) > 0.1f || abs(scaledDy) > 0.1f) {
                     pointerUpdateListener?.invoke(scaledDx, scaledDy)
