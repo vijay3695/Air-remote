@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_keyboard -> showKeyboardTextInputDialog()
                 R.id.nav_qr -> showQrInfoDialog()
                 R.id.nav_settings -> showSettingsDialog()
-                R.id.nav_faq -> showFaqDialog()
+                R.id.nav_faq -> startActivity(Intent(this, HelpFaqActivity::class.java))
                 R.id.nav_about -> showAboutDialog()
             }
             drawerLayout?.closeDrawers()
